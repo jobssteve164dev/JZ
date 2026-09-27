@@ -13,7 +13,8 @@ export class LearningDriver{
  }
  tick(dt){
   const s=this.sim,r=s.route;
-  for(const e of s.events)if(!['meet','overtake'].includes(e.kind)&&!this.spoken.has(e.id)&&(e.announceS??e.s)-s.progress<90){
+  const maneuver=s.events.some(e=>e.status==='pending'&&(e.meetingStart!==undefined||e.travelStart!==undefined));
+  for(const e of s.events)if(!maneuver&&!['meet','overtake'].includes(e.kind)&&!this.spoken.has(e.id)&&(e.announceS??e.s)-s.progress<90){
    this.spoken.add(e.id);this.caption=`${e.label}。${e.hint}`;this.announce(this.caption);
   }
   if(!s.started){
@@ -28,8 +29,8 @@ export class LearningDriver{
   const steer=clamp(Math.atan(2*2.7*Math.sin(error)/ahead)/.52,-1,1);
   let speed=Math.abs(angle(at(r,s.progress+15).heading-s.heading))>.12?2.2:5;
   let signal=s.started?'off':'left';
-  if(pending&&s.progress>(pending.signalS??pending.s-65)&&pending.direction)signal=pending.direction;
-  if(pending?.returnS!==undefined&&s.progress>pending.returnS)signal='right';
+  if(pending&&s.progress>(pending.signalS??pending.s-65)&&pending.direction)signal=pending.checked?s.signal:pending.direction;
+  if(pending?.returnS!==undefined&&s.progress>pending.returnS)signal=pending.returnStarted||pending.returnSignal?s.signal:'right';
   if(s.progress>r.parkingStart)signal='right';
   if(s.signal!==signal)s.action('signal',signal);
   s.action('look','left');s.action('look','right');

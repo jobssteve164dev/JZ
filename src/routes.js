@@ -1,4 +1,4 @@
-import {attachLaneRules} from './lanes.js';
+import {attachLaneRules,junctionRange} from './lanes.js';
 import {remapRoadPoint} from './road-layout.js';
 export const labels={start:'起步',right:'路口右转',left:'路口左转',change:'变更车道',straight:'直线行驶',uturn:'掉头',meet:'会车',overtake:'超车',cross:'路口直行',school:'学校区域',bus:'公交车站',park:'靠边停车'};
 export const hints={start:'系好安全带，挂 D 挡，松驻车制动；打左灯满 3 秒，观察后平稳起步。',right:'提前打右灯，观察右后方；减速后沿右转车道转弯。',left:'提前打左灯，观察左后方；遵守信号，减速左转。',change:'先观察、打灯满 3 秒，再平稳转向进入相邻车道，完成后关灯。',straight:'目视远处，保持车道；方向轻微修正，避免急打方向。',uturn:'打左灯满 3 秒，观察左后方；减速到 10 km/h 左右完成掉头。',meet:'观察对向来车，减速靠右，保持安全间距。',overtake:'观察左后方，左灯满 3 秒后超车；驶过后观察右后方，右灯满 3 秒再返回。',cross:'提前减速并左右观察，停车线前看信号，礼让行人。',school:'留意学校标志，提前点刹，速度低于 30 km/h，左右观察。',bus:'留意公交站牌，提前点刹，速度低于 30 km/h，注意上下车行人。',park:'右灯满 3 秒，观察右后方；车身距右边线 30 cm 内停稳，拉驻车制动，挂 P 挡。'};
@@ -6,10 +6,10 @@ const p=(x,z)=>({x,z});
 // Road geometry preserves the supplied diagrams' topology; dimensions are schematic.
 const specs={
   1:{name:'一号线',color:'#4f7cff',image:'mmexport1790494901618.jpg',subtitle:'环绕车管所 · 三次右转',
-    points:[[-367,180],[-367,25],[-367,13],[-345,13],[-250,13],[-205,5],[-20,5],[3,3],[5,-25],[5,-280],[3,-294],[-2,-300],[-7,-294],[-9,-280],[-9,-230],[-9,-200],[-5,-180],[-5,-165],[-9,-145],[-9,500],[-13,540],[-13,610],[-13,647],[-28,647],[-340,647],[-367,647],[-367,630],[-367,505]],
+    points:[[-367,180],[-367,25],[-367,13],[-345,13],[-250,13],[-205,5],[-20,5],[3,3],[5,-25],[5,-280],[3,-294],[-2,-300],[-7,-294],[-9,-280],[-9,-170],[-9,-140],[-5,-120],[-5,-105],[-9,-85],[-9,500],[-13,540],[-13,610],[-13,647],[-28,647],[-340,647],[-367,647],[-367,630],[-367,505]],
     roads:[[-380,0,-380,740],[0,-360,0,740],[-460,0,160,0],[-460,330,160,330],[-460,660,160,660]],
     junctions:[[-380,0],[0,0],[-380,330],[0,330],[-380,660],[0,660]],
-    markers:[['start',-367,180],['right',-367,35],['change',-250,13,'left'],['left',-40,5],['straight',5,-140],['uturn',5,-265],['meet',-9,-240],['overtake',-9,-205],['cross',-9,-35],['school',-9,160],['cross',-9,295],['change',-9,500,'right'],['right',-13,610],['bus',-140,647],['right',-340,647],['park',-367,505]],
+    markers:[['start',-367,180],['right',-367,35],['change',-250,13,'left'],['left',-40,5],['straight',5,-140],['uturn',5,-265],['meet',-9,-255],['overtake',-9,-145],['cross',-9,-35],['school',-9,160],['cross',-9,295],['change',-9,500,'right'],['right',-13,610],['bus',-140,647],['right',-340,647],['park',-367,505]],
     lights:[[-367,29],[-28,5],[-9,-29],[-9,301],[-340,647]],
     signs:[['school',-9,160],['bus',-140,647]]},
   9:{name:'九号线',color:'#ad66ef',image:'mmexport1790494903835.jpg',subtitle:'东侧起步 · 北端掉头',
@@ -63,8 +63,12 @@ export function getRoute(id){
     return {id:`${id}-${i}`,kind,s:n.s,point:at(r,n.s),label:labels[kind],hint:hints[kind],direction:direction??({left:'left',right:'right',uturn:'left',start:'left',park:'right',overtake:'left'}[kind]),silent:['school','bus'].includes(kind),status:'pending'};
   });
   const maneuverLengths={1:{2:60,7:80,11:60},9:{2:160,5:50,7:50},10:{1:50,3:60,9:95,11:60,13:115}};
-  r.events.forEach((e,i)=>{e.endS=e.s+(maneuverLengths[id]?.[i]??(e.kind==='straight'?65:12))*scale;});
+  r.events.forEach((e,i)=>{e.endS=e.s+(e.kind==='meet'?8:(maneuverLengths[id]?.[i]??(e.kind==='straight'?65:12))*scale);});
   r.lights=spec.lights.map(([x,z],i)=>{const mapped=remapRoadPoint(spec,id,p(x,z)),n=nearest(r,p(mapped.x*scale,mapped.z*scale));return {s:n.s,point:at(r,n.s),offset:i*13};});
-  attachLaneRules(r);cache.set(id,r);return r;
+  attachLaneRules(r);
+  for(const e of r.events)if(['cross','left','right'].includes(e.kind)){
+    const range=junctionRange(r,e.s);if(range){e.assessmentStart=range.start;e.endS=range.end;}
+  }
+  cache.set(id,r);return r;
 }
 export const routes=[1,9,10].map(getRoute);

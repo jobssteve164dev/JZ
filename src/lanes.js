@@ -18,7 +18,7 @@ export function attachLaneRules(route){
   if(back)e.returnS=route.keyPath[returnIndex].s;
   e.hint=`先观察后方，打${e.direction==='left'?'左':'右'}灯满 3 秒，从${from===3?'最右侧车道':laneNames[from]}进入${laneNames[to]}。${back?'听到返回提示后重新观察右后方，右灯满 3 秒再返回'+laneNames[back]+'。':'完成后关闭转向灯。'}`;
  }
- for(const e of route.events){if(e.kind==='meet')e.hint='15 秒内制动减速、左右观察，在车道内稍向右靠；听到会车结束后平稳回正，不跨车道。';if(e.kind==='overtake')e.hint+=' 从开始超车口令起，150 米内完成超越及回位。';}
+ for(const e of route.events){if(e.kind==='meet')e.hint='5 秒内制动减速、左右观察，在车道内稍向右靠；听到会车结束后平稳回正，不跨车道。';if(e.kind==='overtake')e.hint+=' 从开始超车口令起，150 米内完成超越及回位。';}
  for(const e of route.events)if(['right','left','uturn'].includes(e.kind)){
   const stage=laneStage(route,e.s-1);if(!stage)continue;
   const section=sectionForPosition(route,e.point,stage);
@@ -34,6 +34,24 @@ export function lateralPosition(route,position,stage){
 }
 export function laneNumber(route,position,stage){const d=lateralPosition(route,position,stage)/route.scale,edges=sectionForPosition(route,position,stage).edges;if(d<edges[0]-1e-9||d>edges.at(-1)+1e-9)return 0;const lane=edges.findIndex((v,i)=>i&&d<v);return lane>0?lane:edges.length-1;}
 export function inJunction(route,p){return (route.junctionAreas??=route.junctions.map(([x,z])=>({x,z,...junctionBounds(route,x,z)}))).some(b=>p.x>b.x-b.left&&p.x<b.x+b.right&&p.z>b.z-b.top&&p.z<b.z+b.bottom);}
+export function junctionRange(route,s){
+ inJunction(route,route.path[0]);let range;
+ for(let i=1;i<route.path.length;i++){
+  const a=route.path[i-1],b=route.path[i];if(b.s<s-40||a.s>s+120)continue;
+  for(const box of route.junctionAreas){
+   let from=0,to=1;
+   for(const [axis,min,max]of [['x',box.x-box.left,box.x+box.right],['z',box.z-box.top,box.z+box.bottom]]){
+    const delta=b[axis]-a[axis];
+    if(Math.abs(delta)<1e-9){if(a[axis]<min||a[axis]>max)to=-1;}
+    else{const t1=(min-a[axis])/delta,t2=(max-a[axis])/delta;from=Math.max(from,Math.min(t1,t2));to=Math.min(to,Math.max(t1,t2));}
+   }
+   if(from>to)continue;
+   const start=a.s+(b.s-a.s)*from,end=a.s+(b.s-a.s)*to;if(end<s)continue;
+   if(range&&start>range.end+.01)return range;
+   if(!range)range={start,end};else range.end=end;
+  }
+ }return range;
+}
 export function medianAt(route,p){
  if(inJunction(route,p))return false;
  return route.roads.some(([x1,z1,x2,z2],road)=>{

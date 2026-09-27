@@ -24,7 +24,7 @@ export class Simulation{
       if(this.speed>.2&&value==='P'){this.message='请停稳后挂 P 挡';return;}
       this.gear=value;
     }
-    if(name==='signal'){this.signal=this.signal===value?'off':value;this.signalAge=0;}
+    if(name==='signal'){this.signal=this.signal===value?'off':value;this.signalAge=0;this.signalHeading=this.heading;this.signalTurned=false;}
     if(name==='look'&&['left','right'].includes(value))this.looks[value]=this.time;
     if(name==='finish')this.finishParking();
   }
@@ -52,6 +52,11 @@ export class Simulation{
       this.checkSignal(this.events[0]);
     }
     this.heading+=Math.tan(this.steer*.52)*this.speed/2.7*dt;
+    if(this.signal!=='off'){
+      const direction=this.signal==='right'?1:-1;
+      if(this.speed>.5&&direction*angle(this.heading-this.signalHeading)>.04&&direction*this.steer>.08)this.signalTurned=true;
+      if(this.signalTurned&&direction*this.steer<=.01){this.signal='off';this.signalAge=0;this.signalTurned=false;}
+    }
     this.position.x+=Math.sin(this.heading)*this.speed*dt;this.position.z-=Math.cos(this.heading)*this.speed*dt;
     this.distance+=this.speed*dt;
     for(const vehicle of this.traffic){vehicle.active=Math.abs(this.progress-vehicle.s)<100;if(vehicle.active&&Math.hypot(vehicle.x-this.position.x,vehicle.z-this.position.z)<2.5&&this.speed>.2)this.fail(`collision-${vehicle.id}`,'与其他车辆发生碰撞');}
@@ -68,29 +73,32 @@ export class Simulation{
     for(const e of this.events){
       if(e.status!=='pending'||e.kind==='park')continue;
       if(e.kind==='overtake'&&!e.prewarned&&this.progress>=e.s-80){e.prewarned=true;prompt(this,e,'prepare','前方超车，左灯满三秒，观察左后方。');}
+      if(e.kind==='meet'&&!e.prewarned&&this.progress>=e.s-40){e.prewarned=true;e.preparationTime=this.time;prompt(this,e,'prepare','前方会车，减速并左右观察，五秒内靠右及回正。');}
       const begin=e.kind==='start'?0:e.s-35,end=e.endS;
       if(this.progress>=begin&&(this.progress<=end||['overtake','meet'].includes(e.kind))){
-        e.peakSpeed=Math.max(e.peakSpeed,this.speed*3.6);
+        if(this.progress>=(e.assessmentStart??e.s))e.peakSpeed=Math.max(e.peakSpeed,this.speed*3.6);
         e.braked ||= this.time-this.braked<1;
         e.lookLeft ||= this.time-this.looks.left<2;e.lookRight ||= this.time-this.looks.right<2;
         if(!e.entered){e.entered=true;e.startOffset=this.offset;}
         if(e.laneChange){const lane=laneNumber(this.route,this.position,e.laneChange);(e.lanesSeen??=new Set()).add(lane);e.endLane=lane;}
         e.maxOffset=Math.max(e.maxOffset??0,Math.abs(this.offset));e.endOffset=this.offset;
-        if(this.progress>=e.s&&!e.checked){e.checked=true;
+        if(this.progress>=e.s&&!e.arrowChecked){e.arrowChecked=true;
           if(!checkDirection(this,e))this.fail(`${e.id}-arrow`,`${e.label}：当前车道导向不允许此方向`);
-          if(e.direction&&e.kind!=='start')this.checkSignal(e);
+        }
+        if(this.progress>=(e.assessmentStart??e.s)&&!e.checked){e.checked=true;
+          if(e.direction&&e.kind!=='start')this.checkSignal(e,!['left','right'].includes(e.kind));
         }
         if(e.kind!=='overtake'&&e.returnS!==undefined&&this.progress>e.returnS&&this.signalReady('right')&&this.time-this.looks.right<8)e.returnSignal=true;
       }
-      if(e.kind==='meet'){if(this.progress>=begin)updateMeeting(this,e);}
+      if(e.kind==='meet'){if(this.progress>=e.s)updateMeeting(this,e);}
       else if(e.kind==='overtake'){if(this.progress>=e.s)updateOvertake(this,e);}
       else if(this.progress>end){this.evaluate(e);}
     }
     this.parkingReady=this.progress>=this.route.length-20;
   }
-  checkSignal(e){
+  checkSignal(e,checkLook=true){
     if(!this.signalReady(e.direction))this.fail(`${e.id}-signal`,`${e.label}：${e.direction==='left'?'左':'右'}转向灯未开启满 3 秒`);
-    if(this.time-this.looks[e.direction]>8)this.fail(`${e.id}-look`,`${e.label}：未观察${e.direction==='left'?'左':'右'}后方`);
+    if(checkLook&&this.time-this.looks[e.direction]>8)this.fail(`${e.id}-look`,`${e.label}：未观察${e.direction==='left'?'左':'右'}后方`);
   }
   evaluate(e){
     const key=e.id;
@@ -101,7 +109,9 @@ export class Simulation{
       if(!e.lookLeft||!e.lookRight)this.fail(`${key}-look`,`${e.label}：未左右观察`);
     }
     if(['right','left'].includes(e.kind)&&!e.braked)this.fail(`${key}-brake`,`${e.label}：未提前制动减速`);
-    if(['right','left','uturn'].includes(e.kind)&&e.peakSpeed>25)this.fail(`${key}-speed`,`${e.label}：转弯速度过快`);
+    if(['right','left'].includes(e.kind)&&!(e.direction==='left'?e.lookLeft:e.lookRight))this.fail(`${key}-look`,`${e.label}：未观察${e.direction==='left'?'左':'右'}后方`);
+    if(['right','left'].includes(e.kind)&&e.peakSpeed>=30)this.fail(`${key}-speed`,`${e.label}：转弯时未减速至 30 km/h 以下`);
+    if(e.kind==='uturn'&&e.peakSpeed>25)this.fail(`${key}-speed`,`${e.label}：掉头速度过快`);
     if(e.kind==='straight'&&(e.maxOffset??0)>1.2*this.route.scale)this.fail(`${key}-line`,'直线行驶：车身偏移过大');
     if(['change','overtake'].includes(e.kind)&&(Math.abs(e.endOffset??0)>1.5*this.route.scale||(e.maxOffset??0)>2.5*this.route.scale))this.fail(`${key}-path`,`${e.label}：未按要求驶入目标车道`);
     if(e.laneChange&&(!e.lanesSeen?.has(e.laneChange.from)||!e.lanesSeen?.has(e.laneChange.to)||e.endLane!==(e.laneChange.back??e.laneChange.to)))this.fail(`${key}-lane`,`${e.label}：未完成要求的车道变化或回位`);

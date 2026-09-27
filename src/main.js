@@ -1,6 +1,7 @@
 import './style.css';
 import {installApp,enterDrivingDisplay,registerOffline} from './install.js';
 import {routes,getRoute,at} from './routes.js';
+import {MEETING_SECONDS} from './maneuvers.js';
 import {Simulation,lightPhase} from './simulation.js';
 import {DrivingScene} from './scene.js';
 import {LightingExam,questions,lightNames} from './lights.js';
@@ -146,7 +147,7 @@ function renderUI(){
  if(maneuver)e=maneuver;
  const approaching=e.s-sim.progress<80;
  $('#upcoming').textContent=sim.parkingReady?'靠边停车区域':`${approaching?'当前项目':'前方项目'} · ${Math.max(0,Math.round(e.s-sim.progress))}m`;
- if(maneuver)$('#upcoming').textContent=maneuver.kind==='meet'?`会车 · 剩余 ${Math.max(0,15-(sim.time-maneuver.meetingStart)).toFixed(1)} 秒`:`超车 · 剩余 ${Math.max(0,150-(sim.distance-maneuver.travelStart)).toFixed(0)} 米`;
+ if(maneuver)$('#upcoming').textContent=maneuver.kind==='meet'?`会车 · 剩余 ${Math.max(0,MEETING_SECONDS-(sim.time-maneuver.meetingStart)).toFixed(1)} 秒`:`超车 · 剩余 ${Math.max(0,150-(sim.distance-maneuver.travelStart)).toFixed(0)} 米`;
  $('#instruction').textContent=mode==='exam'&&!approaching?'按路线行驶':e.label;
  $('#hint').textContent=mode==='learn'?learner.caption:sim.parkingReady?`距右边线约 ${Math.max(-99,Math.round(sim.curbGap*100))} cm。停稳后拉驻车制动、挂 P 挡。`:mode==='practice'?e.hint:'留意道路标志，按口令完成考试。';
  $('#finish').classList.toggle('hidden',!sim.parkingReady);
