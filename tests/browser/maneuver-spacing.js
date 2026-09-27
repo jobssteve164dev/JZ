@@ -21,7 +21,7 @@ async page=>{
    if(await page.locator('#resume').isVisible())throw new Error('Unexpected browser focus loss paused driving');
    const state=await page.evaluate(()=>({km:parseFloat(document.querySelector('#distance').textContent),up:document.querySelector('#upcoming').textContent}));
    if(state.up.startsWith('会车 · 剩余'))meetingHUD.push(parseFloat(state.up.split('剩余 ')[1]));
-   const near=id===1?state.km>1.08&&state.km<1.48:id===9?state.km>.06&&state.km<.39||state.km>2.62&&state.km<2.83:state.km>.06&&state.km<.23||state.km>1.52&&state.km<1.78;
+   const near=id===1?state.km>1.08&&state.km<1.48:id===9?state.km>.06&&state.km<.50||state.km>2.62&&state.km<2.83:state.km>.06&&state.km<.23||state.km>1.52&&state.km<1.78;
    await page.clock.fastForward(near?200:5000);
   }
   const finished=await page.getByRole('dialog',{name:'这条路线，学完了',exact:true}).isVisible(),score=await page.locator('#score').textContent();

@@ -46,3 +46,6 @@ This file stores stable project facts future agents should reuse. Do not paste r
 ## Handoff Notes
 
 - 项目规则与原图保持；不修改 SoloMap 路线图和环节状态。
+
+
+九号线超车考点与完整变道/回位轨迹一起后移约127米；直线行驶结束后留约52米再预告超车，保持起步→直线→超车→右转顺序、外侧→中间→外侧车道与超车150米要求，回位后仍留有右转准备路段。距离是训练布置，不是原图实测值。
