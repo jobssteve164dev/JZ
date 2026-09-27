@@ -2,9 +2,10 @@ import {at,nearest} from './routes.js';
 import {updateOvertake,updateMeeting,prompt} from './maneuvers.js';
 import {LightingControls,LightStalk} from './lights.js';
 import {checkLane,laneNumber,curbGap,checkDirection} from './lanes.js';
+import {trafficSignal} from './traffic-signals.js';
+export {lightPhase} from './traffic-signals.js';
 export const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 export const angle=n=>Math.atan2(Math.sin(n),Math.cos(n));
-export function lightPhase(time,offset=0){const t=(time+offset)%60;return t<30?'red':t<56?'green':'yellow';}
 export class Simulation{
   constructor(route,mode='practice'){
     this.route=route;this.mode=mode;this.position=at(route,0);this.heading=this.position.heading;
@@ -68,7 +69,7 @@ export class Simulation{
     if(this.speed*3.6>50)this.fail('speed','车速超过 50 km/h');
     if(this.speed>.1){const violation=checkLane(this);if(violation)this.fail(violation.key,violation.text);}
     for(const l of this.route.lights){
-      if(previous<l.s&&this.progress>=l.s&&lightPhase(this.time,l.offset)==='red')this.fail(`red-${l.s}`,'越过停止线时为红灯');
+      if(previous<l.s&&this.progress>=l.s&&trafficSignal(l,this.time).redViolation)this.fail(`red-${l.s}`,'越过停止线时为红灯');
     }
     for(const e of this.events){
       if(e.status!=='pending'||e.kind==='park')continue;

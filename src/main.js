@@ -2,7 +2,8 @@ import './style.css';
 import {installApp,enterDrivingDisplay,registerOffline} from './install.js';
 import {routes,getRoute,at} from './routes.js';
 import {MEETING_SECONDS} from './maneuvers.js';
-import {Simulation,lightPhase} from './simulation.js';
+import {Simulation} from './simulation.js';
+import {trafficSignal} from './traffic-signals.js';
 import {DrivingScene} from './scene.js';
 import {LightingExam,questions,lightNames} from './lights.js';
 import {mountLightStalk} from './light-stalk.js';
@@ -140,7 +141,7 @@ function renderUI(){
  for(const b of document.querySelectorAll('[data-action="gear"]'))b.classList.toggle('active',sim.gear===b.dataset.value);
  $('#indicator').textContent=sim.lighting.hazard?'△ 双闪开启':sim.signal==='off'?'转向灯关闭':`${sim.signal==='left'?'← 左灯':'右灯 →'} ${sim.signalAge.toFixed(1)} 秒`;
  const light=sim.route.lights.find(l=>l.s>=sim.progress&&l.s-sim.progress<130);
- $('#traffic').textContent=light?`${{red:'红灯 · 停车',green:'绿灯',yellow:'黄灯 · 准备停车'}[lightPhase(sim.time,light.offset)]} ${Math.round(light.s-sim.progress)}m`:'留意交通信号';
+ $('#traffic').textContent=light?`${trafficSignal(light,sim.time).label} ${Math.round(light.s-sim.progress)}m`:'留意交通信号';
  let e=sim.next;
  if(mode==='exam'&&e.silent){e=sim.events.find(x=>x.s>e.s&&!x.silent&&x.status==='pending')??e;}
  const maneuver=sim.events.find(x=>x.status==='pending'&&(x.meetingStart!==undefined||x.travelStart!==undefined));

@@ -1,7 +1,8 @@
 import {meetingOffset} from './maneuvers.js';
 import {parkingOffset} from './lanes.js';
 import {at} from './routes.js';
-import {angle,clamp,lightPhase} from './simulation.js';
+import {angle,clamp} from './simulation.js';
+import {trafficSignal} from './traffic-signals.js';
 
 export class LearningDriver{
  constructor(sim,announce){this.sim=sim;this.announce=announce;this.spoken=new Set();this.ticks=0;this.caption='';}
@@ -35,7 +36,7 @@ export class LearningDriver{
   if(s.signal!==signal)s.action('signal',signal);
   s.action('look','left');s.action('look','right');
   const light=r.lights.find(l=>l.s>s.progress&&l.s-s.progress<35);
-  if(light&&lightPhase(s.time,light.offset)!=='green')speed=Math.min(speed,Math.max(0,(light.s-s.progress-4)*.45));
+  if(light&&trafficSignal(light,s.time).stop)speed=Math.min(speed,Math.max(0,(light.s-s.progress-4)*.45));
   if(park)speed=Math.min(speed,Math.max(0,(r.length-s.progress-1)*.4));
   const brake=s.speed>speed?.5:this.ticks%30===0?.2:0;this.ticks++;
   s.step(dt,{throttle:s.speed<speed-.05?.45:0,brake,steer});

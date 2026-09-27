@@ -31,6 +31,8 @@ This file stores stable project facts future agents should reuse. Do not paste r
 
 路口的判定区域与3D路面交叉区域一致，左右转和直行均在驶出路口后结算观察；转向灯仍须在进入路口前开启满三秒。左、右转按低于30km/h判断，不再使用25km/h阈值。
 
+三图的七处信号灯保持原位置和圆形灯样式，按各自路口行驶方向判定。圆形红灯下右转显示“右转让行”，不按闯红灯扣分；直行、左转仍须停车等待，打开右转向灯不会解除红灯限制。右转仍检查减速、观察、转向灯与车道；跟随学习同步遵守这套规则。
+
 ## Architecture Boundaries
 
 - Three.js + Vite，车辆物理与评分、路线、灯光、3D场景、界面分离；Cloudflare Workers Assets，无数据库和登录。

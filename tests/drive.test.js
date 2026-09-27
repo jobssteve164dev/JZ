@@ -1,7 +1,8 @@
 import {meetingOffset} from '../src/maneuvers.js';
 import {parkingOffset} from '../src/lanes.js';
 import test from 'node:test';import assert from 'node:assert/strict';
-import {Simulation,angle,clamp,lightPhase} from '../src/simulation.js';import {getRoute,at} from '../src/routes.js';
+import {Simulation,angle,clamp} from '../src/simulation.js';import {getRoute,at} from '../src/routes.js';
+import {trafficSignal} from '../src/traffic-signals.js';
 // Drives through the real controls and physics. No state assignment or teleporting.
 function drive(id){
  const r=getRoute(id),s=new Simulation(r);s.action('belt');s.action('gear','D');s.action('handbrake');s.action('signal','left');s.action('look','left');s.step(3.2,{});
@@ -20,7 +21,7 @@ function drive(id){
   if(park&&s.signal!=='right')s.action('signal','right');
   s.action('look','left');s.action('look','right');
   const light=r.lights.find(l=>l.s>s.progress&&l.s-s.progress<35);
-  if(light&&lightPhase(s.time,light.offset)!=='green')speed=Math.min(speed,Math.max(0,(light.s-s.progress-4)*.45));
+  if(light&&trafficSignal(light,s.time).stop)speed=Math.min(speed,Math.max(0,(light.s-s.progress-4)*.45));
   if(park)speed=Math.min(speed,Math.max(0,(3000-s.progress-1)*.4));
   const brake=s.speed>speed?.5:i%30===0?.2:0;
   s.step(.05,{throttle:s.speed<speed-.05?.45:0,brake,steer});
