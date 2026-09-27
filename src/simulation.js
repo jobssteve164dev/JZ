@@ -7,7 +7,8 @@ export {lightPhase} from './traffic-signals.js';
 export const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 export const angle=n=>Math.atan2(Math.sin(n),Math.cos(n));
 export class Simulation{
-  constructor(route,mode='practice'){
+  constructor(route,mode='practice',{waitForSpeech=false}={}){
+    this.waitForSpeech=waitForSpeech;
     this.route=route;this.mode=mode;this.position=at(route,0);this.heading=this.position.heading;
     this.time=0;this.speed=0;this.distance=0;this.progress=0;this.gear='P';this.handbrake=true;this.belt=false;
     this.signal='off';this.signalAge=0;this.looks={left:-Infinity,right:-Infinity};this.braked=-Infinity;
@@ -30,6 +31,12 @@ export class Simulation{
     if(name==='finish')this.finishParking();
   }
   signalReady(direction){return this.signal===direction&&this.signalAge>=3-1e-8;}
+  promptFinished(id,finishedAt=this.time){
+    const e=this.events.find(e=>e.startPrompt?.id===id);
+    if(!e||e.status!=='pending')return;
+    if(e.kind==='meet'&&e.meetingStart===undefined)e.meetingStart=finishedAt;
+    if(e.kind==='overtake'&&e.travelStart===undefined)e.travelStart=this.distance;
+  }
   fail(key,text,points=100){
     if(this.keys.has(key))return;this.keys.add(key);this.score=Math.max(0,this.score-points);
     this.faults.push({key,text,points,time:this.time,s:this.progress});this.message=text;
@@ -86,7 +93,10 @@ export class Simulation{
         if(this.progress>=e.s&&!e.arrowChecked){e.arrowChecked=true;
           if(!checkDirection(this,e))this.fail(`${e.id}-arrow`,`${e.label}：当前车道导向不允许此方向`);
         }
-        if(this.progress>=(e.assessmentStart??e.s)&&!e.checked){e.checked=true;
+        const direction=e.direction==='left'?-1:1;
+        const roadHeading=e.laneChange&&({N:0,E:Math.PI/2,S:Math.PI,W:-Math.PI/2}[e.laneChange.direction]);
+        const signalCheckpoint=e.laneChange?this.speed>.5&&(direction*this.steer>.08||direction*angle(this.heading-roadHeading)>.04):this.progress>=(e.assessmentStart??e.s);
+        if(signalCheckpoint&&!e.checked){e.checked=true;
           if(e.direction&&e.kind!=='start')this.checkSignal(e,!['left','right'].includes(e.kind));
         }
         if(e.kind!=='overtake'&&e.returnS!==undefined&&this.progress>e.returnS&&this.signalReady('right')&&this.time-this.looks.right<8)e.returnSignal=true;

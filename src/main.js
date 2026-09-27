@@ -24,12 +24,14 @@ app.innerHTML=`<canvas id="world" aria-label="吴江科目三三维驾驶场景"
 <aside class="route-preview"><div class="progress-label"><strong id="preview-name">一号线</strong><span>路线预览</span></div><canvas class="map" id="preview-map" width="400" height="300" aria-label="所选路线示意图"></canvas><p>跟着路口记方向，跟着标志练动作。</p></aside></section>
 <section id="game" class="hidden"><div class="rotate-tip"><strong>横放手机，开始驾驶</strong><p>横屏能看清道路，也方便双手控制油门和方向。</p></div><div class="cockpit-rim"></div><div class="hud"><div class="hud-left"><strong id="route-title">一号线</strong><span class="tag" id="mode-title">练习</span><span class="stat" id="clock">00:00</span></div><div class="hud-right"><span class="score-label">模拟得分 <b id="score">100</b></span><button id="engine-sound" aria-label="发动机音效" aria-pressed="true">音效</button><button id="car-lights">灯光</button><button id="view">驾驶位</button><button id="pause">暂停</button><button id="game-help">?</button></div></div><aside class="driving-info"><div class="eyebrow" id="upcoming">准备起步</div><h2 id="instruction">起步</h2><p id="hint"></p><div class="signal-status"><span id="indicator">转向灯关闭</span><span id="traffic">留意交通信号</span></div></aside><aside class="game-map"><canvas class="map" id="mini-map" width="300" height="280" aria-label="路线与当前位置"></canvas><div class="progress-label"><span id="distance">0.00 km</span><span>3.00 km</span></div><div class="progress"><i id="progress-bar"></i></div></aside><div class="notice hidden" role="status" id="notice"></div>
 <div class="dashboard"><div class="speedometer"><div><strong id="speed">0</strong><small>km/h</small></div><div><div class="gear" id="gear">P</div><small id="brake-status">驻车制动</small></div></div><div class="controls"><div class="controls-row"><button data-action="signal" data-value="left">← 左灯 <span class="key">Q</span></button><button data-action="look" data-value="left">观察左后 <span class="key">Z</span></button><button data-action="look" data-value="right">观察右后 <span class="key">C</span></button><button data-action="signal" data-value="right">右灯 → <span class="key">E</span></button></div><div class="controls-row"><button data-action="gear" data-value="D">D 挡</button><button data-action="gear" data-value="N">N 挡</button><button data-action="gear" data-value="P">P 挡</button><button data-action="handbrake" class="status-button" id="handbrake">松驻车制动</button><button data-action="belt" class="status-button" id="belt">安全带</button><button data-action="finish" class="hidden" id="finish">结束考试</button></div><div class="controls-row steering"><button data-hold="left" aria-label="向左转向">↶</button><label for="wheel">方向盘</label><input id="wheel" type="range" min="-1" max="1" step=".01" value="0" aria-label="方向盘"><button data-hold="right" aria-label="向右转向">↷</button><small>松开回正</small></div></div><div class="pedals"><button data-hold="brake">刹车<br><small>↓ / 空格</small></button><button data-hold="throttle" class="accelerator">油门<br><small>↑ / W</small></button></div></div></section></main><div id="modal" class="overlay hidden"></div>`;
+let voiceEpoch=0;
 function speak(text,done,queue=false){
  if(!voice||!('speechSynthesis'in window)){voiceBusy=false;done?.();return;}
- if(!queue)speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=1;voiceBusy=true;
- u.onstart=()=>{voiceBusy=true;};u.onend=u.onerror=()=>{voiceBusy=false;done?.();};speechSynthesis.speak(u);
+ if(!queue)stopVoice();const epoch=voiceEpoch,u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=1;voiceBusy=true;
+ u.onstart=()=>{if(epoch===voiceEpoch)voiceBusy=true;};u.onend=u.onerror=()=>{if(epoch!==voiceEpoch)return;voiceBusy=false;done?.();};speechSynthesis.speak(u);
 }
-function stopVoice(){if('speechSynthesis'in window)speechSynthesis.cancel();voiceBusy=false;}
+function stopVoice(){voiceEpoch++;if('speechSynthesis'in window)speechSynthesis.cancel();voiceBusy=false;}
+function spokenAt(session){return session.time+(session===sim&&screen==='drive'&&!session.paused?Math.max(0,(performance.now()-lastTime)/1000):0);}
 function showNotice(text){noticeText=text;noticeUntil=performance.now()+6000;$('#notice').textContent=text;$('#notice').classList.remove('hidden');}
 function map(canvas,route,state){
  const c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;c.clearRect(0,0,w,h);
@@ -48,7 +50,11 @@ function dialog(title,body,kind=''){
 }
 function closeModal(){
  if(screen==='lights'||(screen==='drive'&&portraitTouch.matches))return;
- $('#modal').classList.add('hidden');if(screen==='drive'){sim.paused=false;if(mode==='learn'&&learner?.caption)speak(learner.caption);}
+ $('#modal').classList.add('hidden');if(screen==='drive'){
+  sim.paused=false;lastTime=performance.now();const session=sim,e=sim.events.find(e=>e.status==='pending'&&e.startPrompt&&(e.kind==='meet'?e.meetingStart===undefined:e.travelStart===undefined));
+  if(e)speak(e.startPrompt.text,()=>session.promptFinished(e.startPrompt.id,spokenAt(session)));
+  else if(mode==='learn'&&learner?.caption)speak(learner.caption);
+ }
 }
 function help(){
  if(screen==='drive'){sim.paused=true;stopVoice();}
@@ -97,9 +103,9 @@ function completeLights(){
  startDriving();
 }
 function startDriving(){
- engineSound.unlock();lightExam=null;sim=new Simulation(getRoute(selected),mode);sim.belt=true;
+ engineSound.unlock();lightExam=null;sim=new Simulation(getRoute(selected),mode,{waitForSpeech:voice&&'speechSynthesis'in window});sim.belt=true;
  if(lightFailures.length&&mode!=='learn')sim.fail('lighting','模拟灯光有未通过项目');
- learner=mode==='learn'?new LearningDriver(sim,text=>speak(text,null,true)):null;
+ const session=sim;learner=mode==='learn'?new LearningDriver(sim,(text,done)=>speak(text,()=>done?.(spokenAt(session)),true)):null;
  $('#game').classList.toggle('learning',mode==='learn');
  scene.build(sim.route);screen='drive';held.clear();touchSteer=0;keyboardSteer=0;$('#wheel').value=0;
  $('#modal').classList.add('hidden');$('#home').classList.add('hidden');$('#game').classList.remove('hidden');$('#route-title').textContent=sim.route.name;$('#mode-title').textContent=modeNames[mode];lastAnnounced='';if(mode!=='learn')speak('请起步');if(portraitTouch.matches)pause();
@@ -144,11 +150,11 @@ function renderUI(){
  $('#traffic').textContent=light?`${trafficSignal(light,sim.time).label} ${Math.round(light.s-sim.progress)}m`:'留意交通信号';
  let e=sim.next;
  if(mode==='exam'&&e.silent){e=sim.events.find(x=>x.s>e.s&&!x.silent&&x.status==='pending')??e;}
- const maneuver=sim.events.find(x=>x.status==='pending'&&(x.meetingStart!==undefined||x.travelStart!==undefined));
+ const maneuver=sim.events.find(x=>x.status==='pending'&&(x.meetingEntered||x.overtakeEntered));
  if(maneuver)e=maneuver;
  const approaching=e.s-sim.progress<80;
  $('#upcoming').textContent=sim.parkingReady?'靠边停车区域':`${approaching?'当前项目':'前方项目'} · ${Math.max(0,Math.round(e.s-sim.progress))}m`;
- if(maneuver)$('#upcoming').textContent=maneuver.kind==='meet'?`会车 · 剩余 ${Math.max(0,MEETING_SECONDS-(sim.time-maneuver.meetingStart)).toFixed(1)} 秒`:`超车 · 剩余 ${Math.max(0,150-(sim.distance-maneuver.travelStart)).toFixed(0)} 米`;
+ if(maneuver)$('#upcoming').textContent=maneuver.kind==='meet'?(maneuver.meetingStart===undefined?'会车 · 听口令':`会车 · 剩余 ${Math.min(MEETING_SECONDS,Math.max(0,MEETING_SECONDS-(sim.time-maneuver.meetingStart))).toFixed(1)} 秒`):(maneuver.travelStart===undefined?'超车 · 听口令':`超车 · 剩余 ${Math.max(0,150-(sim.distance-maneuver.travelStart)).toFixed(0)} 米`);
  $('#instruction').textContent=mode==='exam'&&!approaching?'按路线行驶':e.label;
  $('#hint').textContent=mode==='learn'?learner.caption:sim.parkingReady?`距右边线约 ${Math.max(-99,Math.round(sim.curbGap*100))} cm。停稳后拉驻车制动、挂 P 挡。`:mode==='practice'?e.hint:'留意道路标志，按口令完成考试。';
  $('#finish').classList.toggle('hidden',!sim.parkingReady);
@@ -160,11 +166,12 @@ function renderUI(){
 function animate(now){
  const dt=Math.max(0,(now-lastTime)/1000);lastTime=now;
  if(screen==='drive'){
+  sim.waitForSpeech=voice&&'speechSynthesis'in window;
   const dir=(held.has('right')?1:0)-(held.has('left')?1:0);keyboardSteer+=(dir-keyboardSteer)*Math.min(1,dt*5);
   if(learner)learner.step(dt);else sim.step(dt,{throttle:held.has('throttle')?1:0,brake:held.has('brake')?1:0,steer:touchSteer||keyboardSteer});
   if(!touchSteer)$('#wheel').value=keyboardSteer;
   scene.render(sim);if(now-lastUI>100){renderUI();lastUI=now;}
-  for(const p of sim.prompts.splice(0)){showNotice(p.text);speak(p.text,null,true);}
+  for(const p of sim.prompts.splice(0)){const session=sim;showNotice(p.text);speak(p.text,()=>session.promptFinished(p.id,spokenAt(session)),true);}
   if(sim.finished)results();
  }else if(screen==='home'||screen==='lights')scene.render(sim,true);
  if(screen==='lights'&&lightExam&&!document.hidden){

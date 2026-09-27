@@ -18,7 +18,7 @@ export function attachLaneRules(route){
   if(back)e.returnS=route.keyPath[returnIndex].s;
   e.hint=`先观察后方，打${e.direction==='left'?'左':'右'}灯满 3 秒，从${from===3?'最右侧车道':laneNames[from]}进入${laneNames[to]}。${back?'听到返回提示后重新观察右后方，右灯满 3 秒再返回'+laneNames[back]+'。':'完成后关闭转向灯。'}`;
  }
- for(const e of route.events){if(e.kind==='meet')e.hint='5 秒内制动减速、左右观察，在车道内稍向右靠；听到会车结束后平稳回正，不跨车道。';if(e.kind==='overtake')e.hint+=' 从开始超车口令起，150 米内完成超越及回位。';}
+ for(const e of route.events){if(e.kind==='meet')e.hint='5 秒内制动减速、左右观察，在车道内稍向右靠；听到会车结束后平稳回正，不跨车道。';if(e.kind==='overtake')e.hint+=' 从开始超车口令播完后，150 米内完成超越及回位。';}
  for(const e of route.events)if(['right','left','uturn'].includes(e.kind)){
   const stage=laneStage(route,e.s-1);if(!stage)continue;
   const section=sectionForPosition(route,e.point,stage);

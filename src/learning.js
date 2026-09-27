@@ -14,7 +14,7 @@ export class LearningDriver{
  }
  tick(dt){
   const s=this.sim,r=s.route;
-  const maneuver=s.events.some(e=>e.status==='pending'&&(e.meetingStart!==undefined||e.travelStart!==undefined));
+  const maneuver=s.events.some(e=>e.status==='pending'&&(e.meetingEntered||e.overtakeEntered));
   for(const e of s.events)if(!maneuver&&!['meet','overtake'].includes(e.kind)&&!this.spoken.has(e.id)&&(e.announceS??e.s)-s.progress<90){
    this.spoken.add(e.id);this.caption=`${e.label}。${e.hint}`;this.announce(this.caption);
   }
@@ -40,7 +40,7 @@ export class LearningDriver{
   if(park)speed=Math.min(speed,Math.max(0,(r.length-s.progress-1)*.4));
   const brake=s.speed>speed?.5:this.ticks%30===0?.2:0;this.ticks++;
   s.step(dt,{throttle:s.speed<speed-.05?.45:0,brake,steer});
-  for(const p of s.prompts.splice(0)){this.caption=p.text;this.announce(p.text);}
+  for(const p of s.prompts.splice(0)){this.caption=p.text;this.announce(p.text,time=>s.promptFinished(p.id,time));}
   if(s.parkingReady&&s.progress>r.length-3&&s.speed<.08){s.action('handbrake');s.action('gear','P');s.action('finish');}
  }
 }
