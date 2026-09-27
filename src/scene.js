@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {at} from './routes.js';
 import {lightPhase} from './simulation.js';
+import {VehicleLights} from './vehicle-lights.js';
+import {laneEdges,inJunction} from './lanes.js';
 export class DrivingScene{
  constructor(canvas){
   this.renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
@@ -23,20 +25,22 @@ export class DrivingScene{
   const m=new THREE.Mesh(new THREE.PlaneGeometry(width,width/3),new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));m.position.set(x,4,z);m.rotation.y=heading;this.world.add(m);this.box(x,1.8,z,.14,3.6,.14,'#8b999e');return m;
  }
  build(route){
+  this.vehicleLights?.dispose();
   while(this.world.children.length){const child=this.world.children[0];child.traverse(o=>{o.geometry?.dispose();if(o.material?.map){o.material.map.dispose();o.material.dispose();}});this.world.remove(child);}
   this.route=route;this.lights=[];const k=route.scale;
-  this.box(0,-.3,-200,5000,.5,5000,'#93af8e');
+  this.box(0,-.5,-200,5000,.5,5000,'#93af8e');
   for(const [x1,z1,x2,z2] of route.roads){
     const vertical=x1===x2,l=Math.hypot(x2-x1,z2-z1),x=(x1+x2)/2,z=(z1+z2)/2;
-    this.box(x,-.03,z,vertical?36*k:l, .14,vertical?l:36*k,'#bbc2bd');
+    this.box(x,-.12,z,vertical?36*k:l, .14,vertical?l:36*k,'#bbc2bd');
     this.box(x,.015,z,vertical?32*k:l,.07,vertical?l:32*k,'#566269');
     for(const side of [-15.25,15.25]){if(vertical)this.line({x:x+side*k,z:z1},{x:x+side*k,z:z2},.16*k,'#f3f0df');else this.line({x:x1,z:z+side*k},{x:x2,z:z+side*k},.16*k,'#f3f0df');}
     for(let s=0;s<l;s+=10*k){const px=x1+(x2-x1)*s/l,pz=z1+(z2-z1)*s/l;
-      const intersection=route.junctions.some(([jx,jz])=>Math.hypot(jx-px,jz-pz)<24*k);
-      const turnEnd=route.path.some((q,i)=>i>0&&Math.hypot(q.x-px,q.z-pz)<15*k&&q.z<Math.min(...route.junctions.map(j=>j[1]))-300*k);
+      const intersection=inJunction(route,{x:px,z:pz});
+      const roadIndex=route.roads.findIndex(r=>r[0]===x1&&r[1]===z1&&r[2]===x2&&r[3]===z2);
+      const turnEnd=route.medianGaps.some(g=>g.road===roadIndex&&(vertical?pz:px)>=g.from-5*k&&(vertical?pz:px)<=g.to+5*k);
       if(!intersection){
-        for(const lane of [-10,-6,6,10])this.box(px+(vertical?lane*k:0),.07,pz+(vertical?0:lane*k),vertical?.13*k:4*k,.02,vertical?4*k:.13*k,'#e2e5df');
-        if(!turnEnd){this.box(px,.22,pz,vertical?1.6*k:10*k,.35,vertical?10*k:1.6*k,'#7e9d59');}
+        for(const lane of [-laneEdges[2],-laneEdges[1],laneEdges[1],laneEdges[2]])this.box(px+(vertical?lane*k:0),.07,pz+(vertical?0:lane*k),vertical?.13*k:4*k,.02,vertical?4*k:.13*k,'#e2e5df');
+        if(!turnEnd){this.box(px,.22,pz,vertical?6*k:10*k,.35,vertical?10*k:6*k,'#7e9d59');}
       }
     }
     for(let s=30*k;s<l;s+=60*k){const px=x1+(x2-x1)*s/l,pz=z1+(z2-z1)*s/l;
@@ -77,7 +81,7 @@ export class DrivingScene{
   this.car=new THREE.Group();this.world.add(this.car);
   this.box(0,.65,0,1.8,.7,4.3,'#eff3eb',this.car);this.box(0,1.2,-.1,1.6,.65,2.2,'#304e5a',this.car);this.box(0,1.59,.1,1.45,.12,1.3,'#edf2e8',this.car);
   for(const x of [-.91,.91])for(const z of [-1.3,1.25]){const m=new THREE.Mesh(new THREE.CylinderGeometry(.36,.36,.23,12),this.material('#243037'));m.rotation.z=Math.PI/2;m.position.set(x,.38,z);this.car.add(m);}
-  this.box(-.58,.72,-2.17,.42,.22,.07,'#fff5bc',this.car);this.box(.58,.72,-2.17,.42,.22,.07,'#fff5bc',this.car);
+  this.vehicleLights=new VehicleLights(this.car);
   // Merge static geometry to keep mobile draw calls bounded. Dynamic lamps and cars stay separate.
   const batches=new Map();
   for(const obj of [...this.world.children])if(obj.isMesh&&[...this.materials.values()].includes(obj.material)){obj.updateMatrix();const geo=obj.geometry.clone().applyMatrix4(obj.matrix);if(!batches.has(obj.material))batches.set(obj.material,[]);batches.get(obj.material).push(geo);obj.geometry.dispose();this.world.remove(obj);}
@@ -92,15 +96,17 @@ export class DrivingScene{
   if(!this.otherCars.length)for(const vehicle of sim.traffic){const g=new THREE.Group();this.world.add(g);g.position.set(vehicle.x,0,vehicle.z);g.rotation.y=-vehicle.heading;this.box(0,.65,0,1.8,.8,4.3,vehicle.kind==='meet'?'#719cac':'#d0b77e',g);this.box(0,1.25,0,1.55,.6,2.1,'#324d58',g);for(const x of [-.9,.9])for(const z of [-1.3,1.3])this.box(x,.35,z,.25,.6,.6,'#233236',g);this.otherCars.push(g);}
   this.otherCars.forEach((car,i)=>{car.visible=sim.traffic[i].active;});
   const p=sim.position,h=sim.heading;this.car.position.set(p.x,0,p.z);this.car.rotation.y=-h;
+  this.vehicleLights.update(sim);
+  this.car.visible=true;this.car.traverse(o=>{if(o.isMesh)o.visible=preview||this.view!=='cockpit';});
   this.guidance.visible=sim.mode==='practice';
   for(const l of this.lights){const phase=lightPhase(sim.time,l.offset);l.bulbs.forEach((b,i)=>b.material.color.set(['red','yellow','green'][i]===phase?['#ff4848','#ffce42','#46e99a'][i]:'#203735'));}
   let target;
   if(preview){this.camera.position.set(p.x+45,38,p.z+48);target=new THREE.Vector3(p.x,0,p.z-12);}
   else if(this.view==='cockpit'){
-    this.car.visible=false;this.camera.position.set(p.x-Math.cos(h)*.35,1.45,p.z-Math.sin(h)*.35);
+    this.camera.position.set(p.x-Math.cos(h)*.35,1.45,p.z-Math.sin(h)*.35);
     const look=sim.time-sim.looks.left<1?-Math.PI/3:sim.time-sim.looks.right<1?Math.PI/3:0;
     target=new THREE.Vector3(p.x+Math.sin(h+look)*35,1.6,p.z-Math.cos(h+look)*35);
-  }else{this.car.visible=true;this.camera.position.set(p.x-Math.sin(h)*11,6.6,p.z+Math.cos(h)*11);target=new THREE.Vector3(p.x+Math.sin(h)*12,1,p.z-Math.cos(h)*12);}
+  }else{this.car.visible=true;this.camera.position.set(p.x-Math.sin(h)*11,6.6,p.z+Math.cos(h)*11);const compact=this.renderer.domElement.clientHeight<550;const ahead=compact?0:12;target=new THREE.Vector3(p.x+Math.sin(h)*ahead,compact?0:1,p.z-Math.cos(h)*ahead);}
   this.camera.lookAt(target);this.renderer.render(this.scene,this.camera);
  }
 }

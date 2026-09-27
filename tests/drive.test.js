@@ -12,8 +12,8 @@ function drive(id){
   const steer=clamp(Math.atan(2*2.7*Math.sin(error)/Math.max(3,s.speed*1.1))/.52,-1,1);
   let speed=5;
   const lookahead=at(r,s.progress+15);if(Math.abs(angle(lookahead.heading-s.heading))>.12)speed=2.2;
-  if(pending&&pending.s-s.progress<65&&pending.direction&&s.signal!==pending.direction&&!(pending.kind==='overtake'&&s.progress>pending.s+25))s.action('signal',pending.direction);
-  if(pending?.kind==='overtake'&&s.progress>pending.s+25&&s.signal!=='right')s.action('signal','right');
+  if(pending&&pending.s-s.progress<65&&pending.direction&&s.signal!==pending.direction&&!(pending.returnS!==undefined&&s.progress>pending.returnS))s.action('signal',pending.direction);
+  if(pending?.returnS!==undefined&&s.progress>pending.returnS&&s.signal!=='right')s.action('signal','right');
   if(park&&s.signal!=='right')s.action('signal','right');
   s.action('look','left');s.action('look','right');
   const light=r.lights.find(l=>l.s>s.progress&&l.s-s.progress<35);

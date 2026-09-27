@@ -6,20 +6,23 @@ export const questions=[
  {text:'考试结束请关闭所有灯光',answer:'off'}
 ];
 export const lightNames={low:'近光灯',high:'远光灯',flash:'远近光交替', 'hazard-marker':'示廓灯 + 危险报警闪光灯',off:'关闭全部灯光'};
-export class LightingExam{
- constructor(mode='practice',{standalone=false}={}){
-  this.mode=mode;this.beam='off';this.hazard=false;this.transitions=0;this.index=0;this.results=[];
-  const pool=standalone?Array.from({length:19},(_,i)=>i):Array.from({length:17},(_,i)=>i+1);
-  for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
-  this.order=standalone?pool:pool.slice(0,5);this.startQuestion(this.order[0]);
- }
- startQuestion(index){this.current=index;this.transitions=0;this.elapsed=0;}
+export class LightingControls{
+ constructor(){this.beam='off';this.hazard=false;this.transitions=0;}
  control(value){
   if(['low','high'].includes(value)&&['low','high'].includes(this.beam)&&value!==this.beam)this.transitions++;
   if(['low','high','marker'].includes(value))this.beam=value;
   if(value==='hazard')this.hazard=!this.hazard;
   if(value==='off'){this.beam='off';this.hazard=false;}
  }
+}
+export class LightingExam extends LightingControls{
+ constructor(mode='practice',{standalone=false}={}){
+  super();this.mode=mode;this.index=0;this.results=[];
+  const pool=standalone?Array.from({length:19},(_,i)=>i):Array.from({length:17},(_,i)=>i+1);
+  for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
+  this.order=standalone?pool:pool.slice(0,5);this.startQuestion(this.order[0]);
+ }
+ startQuestion(index){this.current=index;this.transitions=0;this.elapsed=0;}
  check(){
   const answer=questions[this.current].answer;
   if(answer==='flash')return this.transitions>=3&&this.beam==='low'&&!this.hazard;

@@ -1,4 +1,6 @@
 import {at,nearest} from './routes.js';
+import {LightingControls,LightStalk} from './lights.js';
+import {checkLane,laneNumber,curbGap} from './lanes.js';
 export const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 export const angle=n=>Math.atan2(Math.sin(n),Math.cos(n));
 export function lightPhase(time,offset=0){const t=(time+offset)%60;return t<30?'red':t<56?'green':'yellow';}
@@ -7,6 +9,7 @@ export class Simulation{
     this.route=route;this.mode=mode;this.position=at(route,0);this.heading=this.position.heading;
     this.time=0;this.speed=0;this.distance=0;this.progress=0;this.gear='P';this.handbrake=true;this.belt=false;
     this.signal='off';this.signalAge=0;this.looks={left:-Infinity,right:-Infinity};this.braked=-Infinity;
+    this.lighting=new LightingControls();this.lightStalk=new LightStalk(this.lighting);this.brakePressed=false;
     this.paused=false;this.finished=false;this.score=100;this.faults=[];this.keys=new Set();
     this.events=route.events.map(e=>({...e,entered:false,status:'pending',peakSpeed:0,braked:false,lookLeft:false,lookRight:false}));
     this.traffic=route.events.filter(e=>['meet','overtake'].includes(e.kind)).map(e=>{const p=at(route,e.s+(e.kind==='overtake'?50:20)*route.scale),offset=(e.kind==='meet'?-18:4)*route.scale;return {id:e.id,s:e.s,active:false,x:p.x+Math.cos(p.heading)*offset,z:p.z+Math.sin(p.heading)*offset,heading:p.heading+(e.kind==='meet'?Math.PI:0),kind:e.kind};});
@@ -35,6 +38,7 @@ export class Simulation{
     let remaining=Math.max(0,dt);while(remaining>1e-8){const step=Math.min(.05,remaining);this.tick(step,input);remaining-=step;}
   }
   tick(dt,{throttle=0,brake=0,steer=0}={}){
+    this.brakePressed=brake>.02;
     this.time+=dt;if(this.signal!=='off')this.signalAge+=dt;
     const previous=this.progress;this.steer=clamp(steer,-1,1);
     const acceleration=this.gear==='D'&&!this.handbrake?clamp(throttle,0,1)*2.4:0;
@@ -56,6 +60,7 @@ export class Simulation{
     if(n.distance>18*this.route.scale&&this.speed>.5)this.fail('offroute','偏离考试路线，请返回当前路段');
     if(Math.abs(angle(this.heading-n.heading))>Math.PI*.65&&this.speed>1)this.fail('wrongway','逆向行驶');
     if(this.speed*3.6>50)this.fail('speed','车速超过 50 km/h');
+    if(this.speed>.1){const violation=checkLane(this);if(violation)this.fail(violation.key,violation.text);}
     for(const l of this.route.lights){
       if(previous<l.s&&this.progress>=l.s&&lightPhase(this.time,l.offset)==='red')this.fail(`red-${l.s}`,'越过停止线时为红灯');
     }
@@ -67,11 +72,12 @@ export class Simulation{
         e.braked ||= this.time-this.braked<1;
         e.lookLeft ||= this.time-this.looks.left<2;e.lookRight ||= this.time-this.looks.right<2;
         if(!e.entered){e.entered=true;e.startOffset=this.offset;}
+        if(e.laneChange){const lane=laneNumber(this.route,this.position,e.laneChange);(e.lanesSeen??=new Set()).add(lane);e.endLane=lane;}
         e.maxOffset=Math.max(e.maxOffset??0,Math.abs(this.offset));e.endOffset=this.offset;
         if(this.progress>=e.s&&!e.checked){e.checked=true;
           if(e.direction&&e.kind!=='start')this.checkSignal(e);
         }
-        if(e.kind==='overtake'&&this.progress>e.s+30&&this.signalReady('right')&&this.time-this.looks.right<8)e.returnSignal=true;
+        if(e.returnS!==undefined&&this.progress>e.returnS&&this.signalReady('right')&&this.time-this.looks.right<8)e.returnSignal=true;
       }
       if(this.progress>end){this.evaluate(e);}
     }
@@ -92,7 +98,8 @@ export class Simulation{
     if(['right','left','uturn'].includes(e.kind)&&e.peakSpeed>25)this.fail(`${key}-speed`,`${e.label}：转弯速度过快`);
     if(e.kind==='straight'&&(e.maxOffset??0)>1.2*this.route.scale)this.fail(`${key}-line`,'直线行驶：车身偏移过大');
     if(['change','overtake'].includes(e.kind)&&(Math.abs(e.endOffset??0)>1.5*this.route.scale||(e.maxOffset??0)>2.5*this.route.scale))this.fail(`${key}-path`,`${e.label}：未按要求驶入目标车道`);
-    if(e.kind==='overtake'&&!e.returnSignal)this.fail(`${key}-return`,'超车：返回原车道前未打右灯并观察');
+    if(e.laneChange&&(!e.lanesSeen?.has(e.laneChange.from)||!e.lanesSeen?.has(e.laneChange.to)||e.endLane!==(e.laneChange.back??e.laneChange.to)))this.fail(`${key}-lane`,`${e.label}：未完成要求的车道变化或回位`);
+    if(e.returnS!==undefined&&!e.returnSignal)this.fail(`${key}-return`,`${e.label}：返回原车道前未打右灯并观察`);
     e.status=this.faults.some(f=>f.key.startsWith(key))?'failed':'passed';
   }
   finishParking(){
@@ -109,6 +116,6 @@ export class Simulation{
     for(const event of this.events)if(event.status==='pending'){event.status='failed';this.fail(`${event.id}-miss`,`${event.label}：未完成项目`);}
     this.finished=true;this.message=this.score>=90?'本次模拟合格':'本次模拟未合格';return true;
   }
-  get curbGap(){return 2.25*this.route.scale-this.offset-.9;}
+  get curbGap(){return curbGap(this.route,this.position);}
   get next(){return this.events.find(e=>e.status==='pending')??this.events.at(-1);}
 }

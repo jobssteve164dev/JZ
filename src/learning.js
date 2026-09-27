@@ -11,7 +11,7 @@ export class LearningDriver{
  }
  tick(dt){
   const s=this.sim,r=s.route;
-  for(const e of s.events)if(!this.spoken.has(e.id)&&e.s-s.progress<90){
+  for(const e of s.events)if(!this.spoken.has(e.id)&&(e.announceS??e.s)-s.progress<90){
    this.spoken.add(e.id);this.caption=`${e.label}。${e.hint}`;this.announce(this.caption);
   }
   if(!s.started){
@@ -26,8 +26,8 @@ export class LearningDriver{
   let speed=Math.abs(angle(at(r,s.progress+15).heading-s.heading))>.12?2.2:5;
   let signal=s.started?'off':'left';
   if(pending&&pending.s-s.progress<65&&pending.direction)signal=pending.direction;
-  if(pending?.kind==='overtake'&&s.progress>pending.s+25)signal='right';
-  if(park)signal='right';
+  if(pending?.returnS!==undefined&&s.progress>pending.returnS)signal='right';
+  if(s.progress>r.parkingStart)signal='right';
   if(s.signal!==signal)s.action('signal',signal);
   s.action('look','left');s.action('look','right');
   const light=r.lights.find(l=>l.s>s.progress&&l.s-s.progress<35);
