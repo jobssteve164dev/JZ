@@ -1,0 +1,8 @@
+{
+ "$schema":"node_modules/wrangler/config-schema.json",
+ "name":"wujiang-km3",
+ "compatibility_date":"2026-09-27",
+ "assets":{"directory":"./dist"},
+ "routes":[{"pattern":"km3.szlk.uk","custom_domain":true}],
+ "workers_dev":false
+}
