@@ -1,4 +1,5 @@
 import {at,nearest} from './routes.js';
+import {updateOvertake,updateMeeting,prompt} from './maneuvers.js';
 import {LightingControls,LightStalk} from './lights.js';
 import {checkLane,laneNumber,curbGap,checkDirection} from './lanes.js';
 export const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
@@ -13,7 +14,7 @@ export class Simulation{
     this.paused=false;this.finished=false;this.score=100;this.faults=[];this.keys=new Set();
     this.events=route.events.map(e=>({...e,entered:false,status:'pending',peakSpeed:0,braked:false,lookLeft:false,lookRight:false}));
     this.traffic=route.events.filter(e=>['meet','overtake'].includes(e.kind)).map(e=>{const p=at(route,e.s+(e.kind==='overtake'?50:20)*route.scale),offset=(e.kind==='meet'?-18:4)*route.scale;return {id:e.id,s:e.s,active:false,x:p.x+Math.cos(p.heading)*offset,z:p.z+Math.sin(p.heading)*offset,heading:p.heading+(e.kind==='meet'?Math.PI:0),kind:e.kind};});
-    this.offset=0;this.steer=0;this.message='准备起步';this.started=false;this.parkingReady=false;
+    this.prompts=[];this.offset=0;this.steer=0;this.message='准备起步';this.started=false;this.parkingReady=false;
   }
   action(name,value){
     if(this.paused||this.finished)return;
@@ -38,7 +39,7 @@ export class Simulation{
     let remaining=Math.max(0,dt);while(remaining>1e-8){const step=Math.min(.05,remaining);this.tick(step,input);remaining-=step;}
   }
   tick(dt,{throttle=0,brake=0,steer=0}={}){
-    this.brakePressed=brake>.02;
+    this.brakePressed=brake>.02;this.throttlePressed=clamp(throttle,0,1);
     this.time+=dt;if(this.signal!=='off')this.signalAge+=dt;
     const previous=this.progress;this.steer=clamp(steer,-1,1);
     const acceleration=this.gear==='D'&&!this.handbrake?clamp(throttle,0,1)*2.4:0;
@@ -66,8 +67,9 @@ export class Simulation{
     }
     for(const e of this.events){
       if(e.status!=='pending'||e.kind==='park')continue;
+      if(e.kind==='overtake'&&!e.prewarned&&this.progress>=e.s-80){e.prewarned=true;prompt(this,e,'prepare','前方超车，左灯满三秒，观察左后方。');}
       const begin=e.kind==='start'?0:e.s-35,end=e.endS;
-      if(this.progress>=begin&&this.progress<=end){
+      if(this.progress>=begin&&(this.progress<=end||['overtake','meet'].includes(e.kind))){
         e.peakSpeed=Math.max(e.peakSpeed,this.speed*3.6);
         e.braked ||= this.time-this.braked<1;
         e.lookLeft ||= this.time-this.looks.left<2;e.lookRight ||= this.time-this.looks.right<2;
@@ -78,9 +80,11 @@ export class Simulation{
           if(!checkDirection(this,e))this.fail(`${e.id}-arrow`,`${e.label}：当前车道导向不允许此方向`);
           if(e.direction&&e.kind!=='start')this.checkSignal(e);
         }
-        if(e.returnS!==undefined&&this.progress>e.returnS&&this.signalReady('right')&&this.time-this.looks.right<8)e.returnSignal=true;
+        if(e.kind!=='overtake'&&e.returnS!==undefined&&this.progress>e.returnS&&this.signalReady('right')&&this.time-this.looks.right<8)e.returnSignal=true;
       }
-      if(this.progress>end){this.evaluate(e);}
+      if(e.kind==='meet'){if(this.progress>=begin)updateMeeting(this,e);}
+      else if(e.kind==='overtake'){if(this.progress>=e.s)updateOvertake(this,e);}
+      else if(this.progress>end){this.evaluate(e);}
     }
     this.parkingReady=this.progress>=this.route.length-20;
   }
@@ -96,6 +100,7 @@ export class Simulation{
       if(!e.braked)this.fail(`${key}-brake`,`${e.label}：未提前制动减速`);
       if(!e.lookLeft||!e.lookRight)this.fail(`${key}-look`,`${e.label}：未左右观察`);
     }
+    if(['right','left'].includes(e.kind)&&!e.braked)this.fail(`${key}-brake`,`${e.label}：未提前制动减速`);
     if(['right','left','uturn'].includes(e.kind)&&e.peakSpeed>25)this.fail(`${key}-speed`,`${e.label}：转弯速度过快`);
     if(e.kind==='straight'&&(e.maxOffset??0)>1.2*this.route.scale)this.fail(`${key}-line`,'直线行驶：车身偏移过大');
     if(['change','overtake'].includes(e.kind)&&(Math.abs(e.endOffset??0)>1.5*this.route.scale||(e.maxOffset??0)>2.5*this.route.scale))this.fail(`${key}-path`,`${e.label}：未按要求驶入目标车道`);

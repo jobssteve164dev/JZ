@@ -2,7 +2,7 @@ async page=>{
  page.setDefaultTimeout(12000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(()=>{Math.random=()=>.999;});await page.reload();
  await page.getByRole('button',{name:'操作指南',exact:true}).click();await page.getByRole('button',{name:'关闭语音',exact:true}).click();await page.getByRole('button',{name:'关闭',exact:true}).click();
- await page.clock.install();await page.getByRole('button',{name:'单练灯光',exact:true}).click();
+ await page.clock.install({time:new Date('2026-09-27T00:00:00Z')});await page.clock.pauseAt(new Date('2026-09-27T00:00:01Z'));await page.getByRole('button',{name:'单练灯光',exact:true}).click();
  await page.clock.fastForward(30000);
  const unlimited=await page.locator('#light-count').textContent()==='1 / 19'&&await page.locator('#light-feedback').textContent()==='';
  const dial=page.getByRole('slider',{name:'灯光旋钮',exact:true});const cdp=await page.context().newCDPSession(page);
@@ -25,11 +25,11 @@ async page=>{
  await dial.focus();await page.keyboard.press(up?'ArrowUp':'ArrowRight');await page.keyboard.press(up?'ArrowUp':'ArrowRight');
  await page.clock.fastForward(900);const noEarlyGrade=await page.locator('#light-feedback').textContent()==='';
  await page.clock.fastForward(1100);const timelyCorrect=await page.locator('#light-feedback').textContent()==='操作正确';
- await page.clock.fastForward(4000);const examHoldsFive=await page.locator('#light-count').textContent()==='1 / 5';
+ await page.clock.fastForward(4000);const examHoldsFive=await page.locator('#light-count').textContent()==='准备 · 开启前照灯';
  await page.clock.fastForward(1100);
  await dial.focus();await page.keyboard.press(up?'ArrowDown':'ArrowLeft');await page.keyboard.press(up?'ArrowDown':'ArrowLeft');
  await page.clock.fastForward(5100);const lateFails=(await page.locator('#light-feedback').textContent()).includes('未通过');
  await page.keyboard.press(up?'ArrowUp':'ArrowRight');await page.keyboard.press(up?'ArrowUp':'ArrowRight');const remainsFailed=(await page.locator('#light-feedback').textContent()).includes('未通过');
  const result={unlimited,horizontalIgnored,up,down,passed,holdsFive,advances,beforeDeadline,noEarlyGrade,timelyCorrect,examHoldsFive,lateFails,remainsFailed,pageErrors:errors};
- if(Object.values(result).some(v=>v===false)||errors.length)throw new Error(JSON.stringify(result));return result;
+ if(Object.values(result).some(v=>v===false)||errors.length)throw new Error(JSON.stringify(result));await page.clock.resume();return result;
 }

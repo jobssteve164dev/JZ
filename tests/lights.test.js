@@ -6,7 +6,7 @@ test('standalone practice shuffles all prompts and road sessions draw only five 
   Math.random=()=>0;
   const a=new m.LightingExam('practice',{standalone:true});
   assert.equal(new Set(a.order).size,19);assert.notDeepEqual(a.order,Array.from({length:19},(_,i)=>i));
-  for(const mode of ['practice','exam','learn']){const e=new m.LightingExam(mode);assert.equal(e.order.length,5);assert.equal(new Set(e.order).size,5);}
+  for(const mode of ['practice','exam','learn']){const e=new m.LightingExam(mode);assert.equal(e.order.slice(1,-1).length,5);assert.equal(new Set(e.order.slice(1,-1)).size,5);}
   const first=new m.LightingExam('exam').order;Math.random=()=>.999;
   assert.notDeepEqual(new m.LightingExam('exam').order,first);
  }finally{Math.random=original;}

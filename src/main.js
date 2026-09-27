@@ -6,6 +6,8 @@ import {DrivingScene} from './scene.js';
 import {LightingExam,questions,lightNames} from './lights.js';
 import {mountLightStalk} from './light-stalk.js';
 import {LearningDriver} from './learning.js';
+import {EngineSound} from './engine-sound.js';
+const engineSound=new EngineSound();
 const images={1:new URL('../input/mmexport1790494901618.jpg',import.meta.url).href,9:new URL('../input/mmexport1790494903835.jpg',import.meta.url).href,10:new URL('../input/mmexport1790494905745.jpg',import.meta.url).href,lights:new URL('../input/mmexport1790495905014.jpg',import.meta.url).href};
 const $=s=>document.querySelector(s);
 let selected=1,mode='practice',sim=new Simulation(getRoute(1)),scene,screen='home',lightExam=null,lightOnly=false,lightFailures=[],voice=true,voiceBusy=false,lightAwait=false,lastAnnounced='',noticeUntil=0,noticeText='',lastTime=performance.now(),lastUI=0;
@@ -18,12 +20,12 @@ app.innerHTML=`<canvas id="world" aria-label="吴江科目三三维驾驶场景"
 <section id="home"><header class="topbar"><div class="brand"><svg aria-hidden="true" viewBox="0 0 40 40"><path d="M5 35 13 5h14l8 30M20 8v7m0 6v7m0 6v5" fill="none" stroke="currentColor" stroke-width="3"/></svg>吴江科三 <span class="tag">C2 自动挡</span></div><div class="top-actions"><button id="install">安装到手机</button><button id="help">操作指南</button></div></header>
 <div class="landing"><div class="eyebrow">WUJIANG · DRIVING PRACTICE</div><h1>把路线练熟。<br><span>上考场更从容。</span></h1><p class="intro">先认路，再练动作。每次 3 公里，<br>从模拟灯光开始，练到靠边停车。</p><div class="course-list">${routes.map(r=>`<button class="course ${r.id===1?'active':''}" data-route="${r.id}" aria-pressed="${r.id===1}"><b style="color:${r.color}">${String(r.id).padStart(2,'0')}</b><span><strong>${r.name}</strong><small>${r.subtitle}</small></span><span aria-hidden="true">↗</span></button>`).join('')}</div><div class="mode"><button data-mode="practice" class="active" aria-pressed="true">带提示练习</button><button data-mode="exam" aria-pressed="false">模拟考试</button><button data-mode="learn" aria-pressed="false">跟随学习</button></div><button id="start" class="primary start"><span>开始练习</span><span aria-hidden="true">→</span></button><div class="secondary-actions"><button id="only-lights">单练灯光</button><button id="source">路线与考点</button></div><p class="footer-note">3.0 km · 约 15 分钟 · 键盘 / 触屏操作</p></div>
 <aside class="route-preview"><div class="progress-label"><strong id="preview-name">一号线</strong><span>路线预览</span></div><canvas class="map" id="preview-map" width="400" height="300" aria-label="所选路线示意图"></canvas><p>跟着路口记方向，跟着标志练动作。</p></aside></section>
-<section id="game" class="hidden"><div class="rotate-tip"><strong>横放手机，开始驾驶</strong><p>横屏能看清道路，也方便双手控制油门和方向。</p></div><div class="cockpit-rim"></div><div class="hud"><div class="hud-left"><strong id="route-title">一号线</strong><span class="tag" id="mode-title">练习</span><span class="stat" id="clock">00:00</span></div><div class="hud-right"><span class="score-label">模拟得分 <b id="score">100</b></span><button id="car-lights">灯光</button><button id="view">驾驶位</button><button id="pause">暂停</button><button id="game-help">?</button></div></div><aside class="driving-info"><div class="eyebrow" id="upcoming">准备起步</div><h2 id="instruction">起步</h2><p id="hint"></p><div class="signal-status"><span id="indicator">转向灯关闭</span><span id="traffic">留意交通信号</span></div></aside><aside class="game-map"><canvas class="map" id="mini-map" width="300" height="280" aria-label="路线与当前位置"></canvas><div class="progress-label"><span id="distance">0.00 km</span><span>3.00 km</span></div><div class="progress"><i id="progress-bar"></i></div></aside><div class="notice hidden" role="status" id="notice"></div>
+<section id="game" class="hidden"><div class="rotate-tip"><strong>横放手机，开始驾驶</strong><p>横屏能看清道路，也方便双手控制油门和方向。</p></div><div class="cockpit-rim"></div><div class="hud"><div class="hud-left"><strong id="route-title">一号线</strong><span class="tag" id="mode-title">练习</span><span class="stat" id="clock">00:00</span></div><div class="hud-right"><span class="score-label">模拟得分 <b id="score">100</b></span><button id="engine-sound" aria-label="发动机音效" aria-pressed="true">音效</button><button id="car-lights">灯光</button><button id="view">驾驶位</button><button id="pause">暂停</button><button id="game-help">?</button></div></div><aside class="driving-info"><div class="eyebrow" id="upcoming">准备起步</div><h2 id="instruction">起步</h2><p id="hint"></p><div class="signal-status"><span id="indicator">转向灯关闭</span><span id="traffic">留意交通信号</span></div></aside><aside class="game-map"><canvas class="map" id="mini-map" width="300" height="280" aria-label="路线与当前位置"></canvas><div class="progress-label"><span id="distance">0.00 km</span><span>3.00 km</span></div><div class="progress"><i id="progress-bar"></i></div></aside><div class="notice hidden" role="status" id="notice"></div>
 <div class="dashboard"><div class="speedometer"><div><strong id="speed">0</strong><small>km/h</small></div><div><div class="gear" id="gear">P</div><small id="brake-status">驻车制动</small></div></div><div class="controls"><div class="controls-row"><button data-action="signal" data-value="left">← 左灯 <span class="key">Q</span></button><button data-action="look" data-value="left">观察左后 <span class="key">Z</span></button><button data-action="look" data-value="right">观察右后 <span class="key">C</span></button><button data-action="signal" data-value="right">右灯 → <span class="key">E</span></button></div><div class="controls-row"><button data-action="gear" data-value="D">D 挡</button><button data-action="gear" data-value="N">N 挡</button><button data-action="gear" data-value="P">P 挡</button><button data-action="handbrake" class="status-button" id="handbrake">松驻车制动</button><button data-action="belt" class="status-button" id="belt">安全带</button><button data-action="finish" class="hidden" id="finish">结束考试</button></div><div class="controls-row steering"><button data-hold="left" aria-label="向左转向">↶</button><label for="wheel">方向盘</label><input id="wheel" type="range" min="-1" max="1" step=".01" value="0" aria-label="方向盘"><button data-hold="right" aria-label="向右转向">↷</button><small>松开回正</small></div></div><div class="pedals"><button data-hold="brake">刹车<br><small>↓ / 空格</small></button><button data-hold="throttle" class="accelerator">油门<br><small>↑ / W</small></button></div></div></section></main><div id="modal" class="overlay hidden"></div>`;
 function speak(text,done,queue=false){
  if(!voice||!('speechSynthesis'in window)){voiceBusy=false;done?.();return;}
  if(!queue)speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=1;voiceBusy=true;
- u.onend=u.onerror=()=>{voiceBusy=false;done?.();};speechSynthesis.speak(u);
+ u.onstart=()=>{voiceBusy=true;};u.onend=u.onerror=()=>{voiceBusy=false;done?.();};speechSynthesis.speak(u);
 }
 function stopVoice(){if('speechSynthesis'in window)speechSynthesis.cancel();voiceBusy=false;}
 function showNotice(text){noticeText=text;noticeUntil=performance.now()+6000;$('#notice').textContent=text;$('#notice').classList.remove('hidden');}
@@ -63,7 +65,7 @@ function startLights(){
  screen='lights';lightExam=new LightingExam(lightOnly?'practice':mode,{standalone:lightOnly});lightFailures=[];lightAwait=false;
  dialog(lightOnly?'灯光乱序练习':'起步前 · 随机五题',`<div class="progress-label"><span id="light-count"></span><span id="light-timer" class="timer"></span></div><div class="light-road" id="light-road" data-beam="off"></div><div class="light-question" id="light-question"></div><p id="light-guide"></p><div id="light-stalk"></div><div class="light-bottom"><p class="light-feedback" id="light-feedback" role="status"></p><button id="repeat-voice">重听口令</button><button class="primary hidden" id="light-continue">进入道路练习</button></div>`,'lighting');
  $('#close-modal').onclick=()=>{stopVoice();lightExam=null;screen='home';$('#modal').classList.add('hidden');};
- stalkUI=mountLightStalk($('#light-stalk'),lightExam,()=>!lightAwait&&!voiceBusy,updateLights);
+ stalkUI=mountLightStalk($('#light-stalk'),lightExam,()=>(!lightAwait||lightExam.done)&&!voiceBusy,updateLights);
  $('#light-continue').onclick=completeLights;$('#repeat-voice').onclick=()=>{if(lightExam.mode!=='exam'&&!lightAwait)speak(questions[lightExam.current].text);};
  showLightQuestion();
 }
@@ -71,10 +73,11 @@ function updateLights(){
  if(!lightExam||!$('#light-road'))return;
  $('#light-road').dataset.beam=lightExam.beam;
  $('#light-road').dataset.hazard=lightExam.hazard;
+ if(lightExam.done)$('#light-continue').disabled=lightExam.beam!=='off'||lightExam.hazard;
 }
 function showLightQuestion(){
- lightAwait=false;lightSettle=0;const q=questions[lightExam.current];$('#light-question').textContent=q.text;$('#light-count').textContent=`${lightExam.index+1} / ${lightExam.order.length}`;
- $('#light-guide').textContent=lightExam.mode!=='exam'?`操作要点：${lightNames[q.answer]}。完成后自动进入下一题。`:'听完口令后，在 5 秒内完成操作。';
+ lightAwait=false;lightSettle=0;const q=questions[lightExam.current];$('#light-question').textContent=q.text;$('#light-count').textContent=lightOnly?`${lightExam.index+1} / ${lightExam.order.length}`:lightExam.index===0?'准备 · 开启前照灯':lightExam.current===18?'收尾 · 关闭所有灯光':`${lightExam.index} / 5`;
+ $('#light-guide').textContent=lightExam.mode!=='exam'?(lightExam.current===18?'关闭全部灯光后继续。':`操作要点：${lightNames[q.answer]}。完成后自动进入下一题。`):'听完口令后，在 5 秒内完成操作。';
  $('#light-feedback').textContent='';$('#repeat-voice').disabled=lightExam.mode==='exam';updateLights();speak(q.text);
 }
 function submitLight(){
@@ -84,14 +87,15 @@ function submitLight(){
  if(!passed)lightFailures.push(q.text);
  $('#light-feedback').textContent=passed?'操作正确':`本题未通过。正确操作：${lightNames[q.answer]}`;
  lightFeedbackTime=0;
- if(lightExam.done){$('#light-continue').classList.remove('hidden');$('#light-continue').textContent=lightOnly?'查看灯光成绩':mode==='learn'?'开始跟随学习':'进入道路练习';}
+ if(lightExam.done){$('#light-continue').classList.remove('hidden');$('#light-continue').textContent=lightOnly?'查看灯光成绩':mode==='learn'?'开始跟随学习':'进入道路练习';if(!passed)$('#light-guide').textContent='请关闭前照灯、示廓灯和双闪，再继续。';updateLights();}
 }
 function completeLights(){
+ if(!lightExam?.done||lightExam.beam!=='off'||lightExam.hazard)return;
  stopVoice();if(lightOnly){const results=lightExam.results;screen='home';dialog('灯光练习结果',`<div class="result-score">${results.filter(r=>r.passed).length}<small> / ${results.length}</small></div><p>答错的口令值得再练一遍。</p><div class="results-list">${results.map(r=>`<div class="result-row ${r.passed?'':'bad'}"><span>${r.question.text}<br><small>${lightNames[r.question.answer]}</small></span><b>${r.passed?'正确':'待练'}</b></div>`).join('')}</div><button class="primary" id="retry-lights">再练一次</button>`);$('#retry-lights').onclick=startLights;lightExam=null;return;}
  startDriving();
 }
 function startDriving(){
- lightExam=null;sim=new Simulation(getRoute(selected),mode);sim.belt=true;
+ engineSound.unlock();lightExam=null;sim=new Simulation(getRoute(selected),mode);sim.belt=true;
  if(lightFailures.length&&mode!=='learn')sim.fail('lighting','模拟灯光有未通过项目');
  learner=mode==='learn'?new LearningDriver(sim,text=>speak(text,null,true)):null;
  $('#game').classList.toggle('learning',mode==='learn');
@@ -99,7 +103,7 @@ function startDriving(){
  $('#modal').classList.add('hidden');$('#home').classList.add('hidden');$('#game').classList.remove('hidden');$('#route-title').textContent=sim.route.name;$('#mode-title').textContent=modeNames[mode];lastAnnounced='';if(mode!=='learn')speak('请起步');if(portraitTouch.matches)pause();
 }
 function pause(){
- if(screen!=='drive')return;sim.paused=true;held.clear();stopVoice();
+ if(screen!=='drive')return;engineSound.silence();sim.paused=true;held.clear();stopVoice();
  dialog('已暂停',`<p>计时与车辆均已暂停。</p><button class="primary" id="resume">继续驾驶</button> <button id="restart">重练这条路线</button> <button id="back-home">返回选路线</button>`);
  $('#resume').onclick=closeModal;$('#restart').onclick=()=>{screen='home';$('#game').classList.add('hidden');$('#home').classList.remove('hidden');prepare();};$('#back-home').onclick=home;
 }
@@ -108,9 +112,9 @@ function vehicleLighting(){
  dialog('车辆灯光','<div id="vehicle-stalk"></div>');
  mountLightStalk($('#vehicle-stalk'),sim.lighting,()=>true,()=>{},sim.lightStalk);
 }
-function home(){screen='home';stopVoice();held.clear();$('#modal').classList.add('hidden');$('#home').classList.remove('hidden');$('#game').classList.add('hidden');selectRoute(selected);}
+function home(){engineSound.silence();screen='home';stopVoice();held.clear();$('#modal').classList.add('hidden');$('#home').classList.remove('hidden');$('#game').classList.add('hidden');selectRoute(selected);}
 function results(){
- screen='result';stopVoice();const failed=sim.faults;
+ engineSound.silence();screen='result';stopVoice();const failed=sim.faults;
  if(mode==='learn'){
   dialog('这条路线，学完了',`<p>${sim.route.name} · 3 公里 · ${formatTime(sim.time)}</p><p>现在自己开一遍，把路口方向和操作要点记牢。</p><button class="primary" id="try-driving">自己练一遍</button> <button id="return">换条路线</button>`);
   $('#close-modal').onclick=home;$('#return').onclick=home;$('#try-driving').onclick=()=>{document.querySelector('[data-mode="practice"]').click();home();prepare();};return;
@@ -121,7 +125,14 @@ function results(){
  $('#close-modal').onclick=home;$('#retry').onclick=()=>{home();prepare();};$('#return').onclick=home;
 }
 function formatTime(seconds){return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;}
+function renderActionState(){
+ for(const b of document.querySelectorAll('[data-action="signal"],[data-action="look"]')){
+  const active=b.dataset.action==='signal'?sim.signal===b.dataset.value:sim.time-sim.looks[b.dataset.value]<.8;
+  b.classList.toggle('active',active);b.setAttribute('aria-pressed',active);
+ }
+}
 function renderUI(){
+ renderActionState();
  $('#speed').textContent=Math.round(sim.speed*3.6);$('#gear').textContent=sim.gear;$('#clock').textContent=formatTime(sim.time);$('#score').textContent=sim.score;
  $('#distance').textContent=(Math.min(sim.progress,3000)/1000).toFixed(2)+' km';$('#progress-bar').style.width=Math.min(100,sim.progress/30)+'%';
  $('#handbrake').textContent=sim.handbrake?'松驻车制动':'拉驻车制动';$('#handbrake').classList.toggle('active',sim.handbrake);$('#belt').classList.toggle('active',sim.belt);$('#brake-status').textContent=sim.handbrake?'驻车制动':'行驶准备';
@@ -131,12 +142,15 @@ function renderUI(){
  $('#traffic').textContent=light?`${{red:'红灯 · 停车',green:'绿灯',yellow:'黄灯 · 准备停车'}[lightPhase(sim.time,light.offset)]} ${Math.round(light.s-sim.progress)}m`:'留意交通信号';
  let e=sim.next;
  if(mode==='exam'&&e.silent){e=sim.events.find(x=>x.s>e.s&&!x.silent&&x.status==='pending')??e;}
+ const maneuver=sim.events.find(x=>x.status==='pending'&&(x.meetingStart!==undefined||x.travelStart!==undefined));
+ if(maneuver)e=maneuver;
  const approaching=e.s-sim.progress<80;
  $('#upcoming').textContent=sim.parkingReady?'靠边停车区域':`${approaching?'当前项目':'前方项目'} · ${Math.max(0,Math.round(e.s-sim.progress))}m`;
+ if(maneuver)$('#upcoming').textContent=maneuver.kind==='meet'?`会车 · 剩余 ${Math.max(0,15-(sim.time-maneuver.meetingStart)).toFixed(1)} 秒`:`超车 · 剩余 ${Math.max(0,150-(sim.distance-maneuver.travelStart)).toFixed(0)} 米`;
  $('#instruction').textContent=mode==='exam'&&!approaching?'按路线行驶':e.label;
  $('#hint').textContent=mode==='learn'?learner.caption:sim.parkingReady?`距右边线约 ${Math.max(-99,Math.round(sim.curbGap*100))} cm。停稳后拉驻车制动、挂 P 挡。`:mode==='practice'?e.hint:'留意道路标志，按口令完成考试。';
  $('#finish').classList.toggle('hidden',!sim.parkingReady);
- if(mode!=='learn'&&approaching&&lastAnnounced!==e.id&&!e.silent){lastAnnounced=e.id;if(e.kind!=='start')speak(`前方${e.label}`);}
+ if(mode!=='learn'&&approaching&&lastAnnounced!==e.id&&!e.silent){lastAnnounced=e.id;if(!['start','meet','overtake'].includes(e.kind))speak(`前方${e.label}`,null,true);}
  if(sim.message!==noticeText&&sim.faults.some(f=>f.text===sim.message))showNotice(sim.message);
  if(performance.now()>noticeUntil)$('#notice').classList.add('hidden');
  map($('#mini-map'),sim.route,sim);
@@ -147,20 +161,24 @@ function animate(now){
   const dir=(held.has('right')?1:0)-(held.has('left')?1:0);keyboardSteer+=(dir-keyboardSteer)*Math.min(1,dt*5);
   if(learner)learner.step(dt);else sim.step(dt,{throttle:held.has('throttle')?1:0,brake:held.has('brake')?1:0,steer:touchSteer||keyboardSteer});
   if(!touchSteer)$('#wheel').value=keyboardSteer;
-  scene.render(sim);if(now-lastUI>100){renderUI();lastUI=now;}if(sim.finished)results();
+  scene.render(sim);if(now-lastUI>100){renderUI();lastUI=now;}
+  for(const p of sim.prompts.splice(0)){showNotice(p.text);speak(p.text,null,true);}
+  if(sim.finished)results();
  }else if(screen==='home'||screen==='lights')scene.render(sim,true);
  if(screen==='lights'&&lightExam&&!document.hidden){
   if(lightAwait){lightFeedbackTime+=dt;$('#light-timer').textContent=lightExam.done?'本组已完成':`${Math.max(0,Math.ceil(5-lightFeedbackTime))} 秒后下一题`;if(!lightExam.done&&lightFeedbackTime>=5)showLightQuestion();}
   else if(!voiceBusy){lightExam.elapsed+=dt;lightSettle=lightExam.check()?lightSettle+dt:0;$('#light-timer').textContent=lightExam.mode==='exam'?`${Math.max(0,5-lightExam.elapsed).toFixed(1)} 秒`:'不限时练习';if(lightExam.mode==='exam'?lightExam.elapsed>=5:lightSettle>=1)submitLight();}
  }
+ engineSound.update(sim,screen==='drive'&&!document.hidden,voiceBusy);
  requestAnimationFrame(animate);
 }
 $('#help').onclick=$('#game-help').onclick=help;$('#source').onclick=source;$('#start').onclick=()=>{enterDrivingDisplay();prepare();};$('#install').onclick=()=>installApp(dialog);$('#only-lights').onclick=()=>{lightOnly=true;startLights();};$('#pause').onclick=pause;
+$('#engine-sound').onclick=()=>{engineSound.enabled=!engineSound.enabled;$('#engine-sound').setAttribute('aria-pressed',engineSound.enabled);$('#engine-sound').textContent=engineSound.enabled?'音效':'静音';if(engineSound.enabled)engineSound.unlock();else engineSound.silence();};
 $('#car-lights').onclick=vehicleLighting;
 $('#view').onclick=()=>{scene.view=scene.view==='chase'?'cockpit':'chase';$('#view').textContent=scene.view==='chase'?'驾驶位':'跟车视角';};
 for(const b of document.querySelectorAll('[data-route]'))b.onclick=()=>selectRoute(+b.dataset.route);
 for(const b of document.querySelectorAll('[data-mode]'))b.onclick=()=>{mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(x=>{const active=x===b;x.classList.toggle('active',active);x.setAttribute('aria-pressed',active);});$('#start span').textContent=mode==='practice'?'开始练习':mode==='learn'?'开始跟随学习':'开始模拟考试';};
-for(const b of document.querySelectorAll('[data-action]'))b.onclick=()=>{if(mode==='learn')return;sim.action(b.dataset.action,b.dataset.value);if(['look','gear','handbrake','finish'].includes(b.dataset.action))showNotice(b.dataset.action==='look'?`已观察${b.dataset.value==='left'?'左':'右'}后方`:sim.message);};
+for(const b of document.querySelectorAll('[data-action]'))b.onclick=()=>{if(mode==='learn')return;sim.action(b.dataset.action,b.dataset.value);renderActionState();if(['look','gear','handbrake','finish'].includes(b.dataset.action))showNotice(b.dataset.action==='look'?`已观察${b.dataset.value==='left'?'左':'右'}后方`:sim.message);};
 for(const b of document.querySelectorAll('[data-hold]')){
  const release=()=>{held.delete(b.dataset.hold);b.classList.remove('active');};
  b.onpointerdown=e=>{b.setPointerCapture(e.pointerId);held.add(b.dataset.hold);b.classList.add('active');};b.onpointerup=b.onpointercancel=b.onlostpointercapture=release;
@@ -173,7 +191,7 @@ addEventListener('keydown',e=>{
  if(screen!=='drive'||sim.paused||mode==='learn'||e.ctrlKey||e.metaKey||e.altKey||e.target.tagName==='INPUT')return;
  if(keyMap[e.code]){e.preventDefault();held.add(keyMap[e.code]);}
  if(e.repeat)return;
- const actions={KeyQ:['signal','left'],KeyE:['signal','right'],KeyZ:['look','left'],KeyC:['look','right']};if(actions[e.code])sim.action(...actions[e.code]);
+ const actions={KeyQ:['signal','left'],KeyE:['signal','right'],KeyZ:['look','left'],KeyC:['look','right']};if(actions[e.code]){sim.action(...actions[e.code]);renderActionState();}
 });
 addEventListener('keyup',e=>{if(keyMap[e.code])held.delete(keyMap[e.code]);});
 portraitTouch.addEventListener('change',()=>{if(screen==='drive'&&portraitTouch.matches)pause();});

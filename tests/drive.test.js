@@ -1,3 +1,4 @@
+import {meetingOffset} from '../src/maneuvers.js';
 import {parkingOffset} from '../src/lanes.js';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {Simulation,angle,clamp,lightPhase} from '../src/simulation.js';import {getRoute,at} from '../src/routes.js';
@@ -8,6 +9,7 @@ function drive(id){
   const pending=s.events.find(e=>e.status==='pending'&&e.kind!=='start');
   const park=s.progress>r.length-35;
   const target=at(r,Math.min(3000,s.progress+Math.max(3,s.speed*1.1)));
+  const meetOffset=meetingOffset(s);target.x+=Math.cos(target.heading)*meetOffset;target.z+=Math.sin(target.heading)*meetOffset;
   if(park){const offset=parkingOffset(r);target.x+=Math.cos(target.heading)*offset;target.z+=Math.sin(target.heading)*offset;}
   const error=angle(Math.atan2(target.x-s.position.x,s.position.z-target.z)-s.heading);
   const steer=clamp(Math.atan(2*2.7*Math.sin(error)/Math.max(3,s.speed*1.1))/.52,-1,1);

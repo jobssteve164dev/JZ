@@ -20,6 +20,6 @@ for(const id of [1,9,10])test(`follow learning drives route ${id}, teaches every
  assert.equal(laneObserved,true);
  assert.equal(s.finished,true,JSON.stringify({progress:s.progress,faults:s.faults}));
  assert.ok(s.progress>2997);assert.equal(s.score,100,JSON.stringify(s.faults));
- for(const e of s.events)assert.ok(spoken.some(t=>t.includes(e.label)&&t.includes(e.hint)),`missing instruction ${e.label}`);
- assert.equal(spoken.length,s.events.length);assert.equal(s.gear,'P');assert.equal(s.handbrake,true);
+ for(const e of s.events.filter(e=>!['meet','overtake'].includes(e.kind)))assert.ok(spoken.some(t=>t.includes(e.label)&&t.includes(e.hint)),`missing instruction ${e.label}`);
+ for(const phase of ['开始会车','会车结束','会车完成','前方超车','开始超车','请返回原车道','超车完成'])assert.ok(spoken.some(t=>t.startsWith(phase)),`missing phase ${phase}`);assert.ok(spoken.some(t=>t.includes('超车完成')));assert.equal(s.gear,'P');assert.equal(s.handbrake,true);
 });

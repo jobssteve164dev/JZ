@@ -18,9 +18,9 @@ export class LightingControls{
 export class LightingExam extends LightingControls{
  constructor(mode='practice',{standalone=false}={}){
   super();this.mode=mode;this.index=0;this.results=[];
-  const pool=standalone?Array.from({length:19},(_,i)=>i):Array.from({length:17},(_,i)=>i+1);
+  const pool=Array.from({length:17},(_,i)=>i+1);
   for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
-  this.order=standalone?pool:pool.slice(0,5);this.startQuestion(this.order[0]);
+  this.order=[0,...(standalone?pool:pool.slice(0,5)),18];this.startQuestion(this.order[0]);
  }
  startQuestion(index){this.current=index;this.transitions=0;this.elapsed=0;}
  check(){
