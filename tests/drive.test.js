@@ -1,15 +1,19 @@
 import {meetingOffset} from '../src/maneuvers.js';
-import {parkingOffset} from '../src/lanes.js';
+import {parkingOffset,laneStage} from '../src/lanes.js';
+import {sectionForPosition} from '../src/road-layout.js';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {Simulation,angle,clamp} from '../src/simulation.js';import {getRoute,at} from '../src/routes.js';
 import {trafficSignal} from '../src/traffic-signals.js';
 // Drives through the real controls and physics. No state assignment or teleporting.
-function drive(id){
- const r=getRoute(id),s=new Simulation(r);s.action('belt');s.action('gear','D');s.action('handbrake');s.action('signal','left');s.action('look','left');s.step(3.2,{});
+function drive(id,offset=0){
+ const r=getRoute(id),s=new Simulation(r,offset?'exam':'practice');s.action('belt');s.action('gear','D');s.action('handbrake');s.action('signal','left');s.action('look','left');s.step(3.2,{});
  for(let i=0;i<40000&&!s.finished;i++){
   const pending=s.events.find(e=>e.status==='pending'&&e.kind!=='start');
   const park=s.progress>r.length-35;
   const target=at(r,Math.min(3000,s.progress+Math.max(3,s.speed*1.1)));
+  const nearJunction=r.events.some(e=>['cross','left','right','uturn'].includes(e.kind)&&s.progress>e.s-45&&s.progress<e.endS+30);
+  const stage=laneStage(r,s.progress),approach=stage&&sectionForPosition(r,target,stage).approach;
+  if(!park&&!nearJunction&&!approach&&s.progress>120){target.x+=Math.cos(target.heading)*offset;target.z+=Math.sin(target.heading)*offset;}
   const meetOffset=meetingOffset(s);target.x+=Math.cos(target.heading)*meetOffset;target.z+=Math.sin(target.heading)*meetOffset;
   if(park){const offset=parkingOffset(r);target.x+=Math.cos(target.heading)*offset;target.z+=Math.sin(target.heading)*offset;}
   const error=angle(Math.atan2(target.x-s.position.x,s.position.z-target.z)-s.heading);
@@ -18,7 +22,7 @@ function drive(id){
   const lookahead=at(r,s.progress+15);if(Math.abs(angle(lookahead.heading-s.heading))>.12)speed=2.2;
   if(pending&&s.progress>(pending.signalS??pending.s-65)&&pending.direction&&s.signal!==pending.direction&&!(pending.returnS!==undefined&&s.progress>pending.returnS))s.action('signal',pending.direction);
   if(pending?.returnS!==undefined&&s.progress>pending.returnS&&s.signal!=='right')s.action('signal','right');
-  if(park&&s.signal!=='right')s.action('signal','right');
+  if(s.progress>r.parkingStart&&s.signal!=='right')s.action('signal','right');
   s.action('look','left');s.action('look','right');
   const light=r.lights.find(l=>l.s>s.progress&&l.s-s.progress<35);
   if(light&&trafficSignal(light,s.time).stop)speed=Math.min(speed,Math.max(0,(light.s-s.progress-4)*.45));
@@ -34,4 +38,8 @@ for(const id of [1,9,10])test(`route ${id}: complete 3km through physical contro
  assert.ok(s.progress>2997);assert.equal(s.score,100,JSON.stringify(s.faults));assert.ok(s.events.every(e=>e.status!=='pending'));
  assert.ok(s.faults.every(f=>!['offroute','wrongway'].includes(f.key)),JSON.stringify(s.faults));
  console.log(`route ${id}: ${Math.round(s.time)}s, ${Math.round(s.distance)}m, score ${s.score}`,s.faults.map(f=>f.text));
+});
+for(const id of [1,9,10])test(`route ${id}: exam accepts an independent trajectory within the correct lanes`,()=>{
+ const s=drive(id,-.7);assert.equal(s.finished,true,JSON.stringify({progress:s.progress,faults:s.faults}));
+ assert.equal(s.score,100,JSON.stringify(s.faults));assert.ok(s.events.every(e=>e.status==='passed'));
 });

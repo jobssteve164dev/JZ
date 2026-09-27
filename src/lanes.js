@@ -33,6 +33,10 @@ export function lateralPosition(route,position,stage){
  return stage.direction==='N'?position.x-road[0]:stage.direction==='S'?road[0]-position.x:stage.direction==='E'?position.z-road[1]:road[1]-position.z;
 }
 export function laneNumber(route,position,stage){const d=lateralPosition(route,position,stage)/route.scale,edges=sectionForPosition(route,position,stage).edges;if(d<edges[0]-1e-9||d>edges.at(-1)+1e-9)return 0;const lane=edges.findIndex((v,i)=>i&&d<v);return lane>0?lane:edges.length-1;}
+export function withinLane(route,position,stage,lane){
+ const d=lateralPosition(route,position,stage),edges=sectionForPosition(route,position,stage).edges;
+ return lane>0&&lane<edges.length&&d-.9>=edges[lane-1]*route.scale-.08&&d+.9<=edges[lane]*route.scale+.08;
+}
 export function inJunction(route,p){return (route.junctionAreas??=route.junctions.map(([x,z])=>({x,z,...junctionBounds(route,x,z)}))).some(b=>p.x>b.x-b.left&&p.x<b.x+b.right&&p.z>b.z-b.top&&p.z<b.z+b.bottom);}
 export function junctionRange(route,s){
  inJunction(route,route.path[0]);let range;
@@ -62,8 +66,27 @@ export function medianAt(route,p){
 }
 export function checkLane(sim){
  const r=sim.route;if(medianAt(r,sim.position))return {key:'median',text:'越过道路中央分界'};
- const stage=laneStage(r,sim.progress);if(!stage||inJunction(r,sim.position))return null;
- const d=lateralPosition(r,sim.position,stage),k=r.scale,section=sectionForPosition(r,sim.position,stage),lanes=stage.lanes.map(l=>semanticLane(l,section.count));
+ const stage=laneStage(r,sim.progress);if(!stage||inJunction(r,sim.position)){sim.examLane=null;return null;}
+ const d=lateralPosition(r,sim.position,stage),k=r.scale,section=sectionForPosition(r,sim.position,stage);
+ if(sim.mode==='exam'){
+  const violation={key:`lane-${stage.id}`,text:'请保持车道，变道前打灯满三秒并观察后方'};
+  if(d-.9<section.edges[0]*k-.08||d+.9>section.edges.at(-1)*k+.08)return violation;
+  if(section.taper){sim.examLane=null;return null;}
+  const lane=laneNumber(r,sim.position,stage),road=`${stage.road}-${stage.direction}-${section.count}`;
+  if(sim.examLane?.road!==road)sim.examLane={road,lane,transition:null};
+  const state=sim.examLane,prepared=direction=>sim.signalReady(direction)&&sim.time-sim.looks[direction]<=8;
+  if(withinLane(r,sim.position,stage,lane)){
+   if(lane!==state.lane){state.lane=lane;state.transition=null;state.intent=null;}
+   const direction=sim.steer<-.08?'left':sim.steer>.08?'right':null;
+   if(direction&&sim.speed>.5&&prepared(direction))state.intent={direction,time:sim.time};
+   return null;
+  }
+  const center=(section.edges[state.lane-1]+section.edges[state.lane])*k/2,direction=d<center?'left':'right',to=state.lane+(direction==='left'?-1:1);
+  if(!state.transition&&(prepared(direction)||state.intent?.direction===direction&&sim.time-state.intent.time<=8))state.transition={from:state.lane,to};
+  const change=state.transition;
+  return change&&to>=1&&to<=section.count&&d-.9>=section.edges[Math.min(change.from,change.to)-1]*k-.08&&d+.9<=section.edges[Math.max(change.from,change.to)]*k+.08?null:violation;
+ }
+ const lanes=stage.lanes.map(l=>semanticLane(l,section.count));
  const min=section.edges[section.taper?0:Math.min(...lanes)-1]*k,max=section.edges[section.taper?section.count:Math.max(...lanes)]*k;
  if(d-.9<min-.08||d+.9>max+.08)return {key:`lane-${stage.id}`,text:stage.lanes.length===1?`请保持${laneNames[stage.lanes[0]]}，不要压线或驶入其他车道`:'变道时越出允许车道'};
  return null;

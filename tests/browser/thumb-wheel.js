@@ -1,0 +1,23 @@
+async page=>{
+ await page.addInitScript(()=>{Math.random=()=>.999;});await page.reload();
+ if(await page.locator('#thumb-wheel').count()!==1)throw new Error('left thumb steering wheel is missing');
+ await page.getByRole('button',{name:'操作指南',exact:true}).click();await page.getByRole('button',{name:'关闭语音',exact:true}).click();await page.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.clock.install({time:new Date('2026-09-27T00:00:00Z')});await page.clock.pauseAt(new Date('2026-09-27T00:00:01Z'));
+ await page.locator('#start').click();for(const key of ['walk','door','seat','begin-lights'])await page.locator('#'+key).click();
+ const dial=page.getByRole('slider',{name:'灯光旋钮',exact:true});await dial.focus();await page.keyboard.press('ArrowUp');await page.keyboard.press('ArrowUp');for(let i=0;i<6;i++){await page.clock.fastForward(1100);await page.clock.fastForward(5100);}await dial.focus();await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowDown');await page.clock.fastForward(1100);await page.locator('#light-continue').click();
+ const wheel=page.locator('#thumb-wheel');if(!await wheel.isVisible())throw new Error('wheel hidden on phone');
+ const box=await wheel.boundingBox(),pedal=await page.locator('[data-hold="throttle"]').boundingBox();if(box.x+box.width>pedal.x||box.y+box.height>390)throw new Error('wheel is not reachable at the left');
+ const blocked=await wheel.evaluate(el=>{const e=new MouseEvent('contextmenu',{bubbles:true,cancelable:true});el.dispatchEvent(e);return {menu:e.defaultPrevented,select:getComputedStyle(el).userSelect};});if(!blocked.menu||blocked.select!=='none')throw new Error('long press selection not blocked '+JSON.stringify(blocked));
+ const cdp=await page.context().newCDPSession(page);const cx=box.x+box.width/2,cy=box.y+box.height/2,r=box.width*.36;
+ const finger=(id,x,y)=>({id,x,y,radiusX:5,radiusY:5,force:1});const gas=finger(2,pedal.x+pedal.width/2,pedal.y+pedal.height/2);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[finger(1,cx,cy-r),gas]});
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[finger(1,cx+r,cy),gas]});await page.clock.fastForward(100);
+ const right=Number(await wheel.getAttribute('aria-valuenow'));if(right<.9||!await page.locator('[data-hold="throttle"]').evaluate(e=>e.classList.contains('active')))throw new Error('wheel and pedal cannot operate together '+right);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[finger(1,cx+r,cy)]});await page.clock.fastForward(100);if(Number(await wheel.getAttribute('aria-valuenow'))!==0)throw new Error('release did not recenter');
+ if(!await page.locator('[data-hold="throttle"]').evaluate(e=>e.classList.contains('active')))throw new Error('wheel release released other finger');await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[finger(3,cx,cy-r)]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[finger(3,cx-r,cy)]});await page.clock.fastForward(100);const left=Number(await wheel.getAttribute('aria-valuenow'));if(left>-.9)throw new Error('left rotation wrong '+left);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});await page.clock.fastForward(100);if(Number(await wheel.getAttribute('aria-valuenow'))!==0)throw new Error('cancel did not recenter');
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[finger(4,cx,cy-r)]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[finger(4,cx+r,cy)]});await page.clock.fastForward(100);await page.locator('#pause').click();await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.locator('#resume').click();await page.clock.fastForward(100);if(Number(await wheel.getAttribute('aria-valuenow'))!==0)throw new Error('pause retained steering');
+ const layouts=[];for(const [width,height] of [[667,375],[740,360],[844,390]]){await page.setViewportSize({width,height});await page.clock.fastForward(100);await page.waitForTimeout(100);const b=await wheel.boundingBox(),p=await page.locator('[data-hold="throttle"]').boundingBox();const controls=await page.locator('.controls').boundingBox();if(b.x<0||b.y<0||b.y+b.height>height||b.x+b.width>controls.x||controls.x+controls.width>p.x)throw new Error('touch controls overlap '+JSON.stringify({width,b,p,controls}));layouts.push({width,height});}
+ await cdp.detach();await page.clock.resume();await page.waitForTimeout(200);await page.screenshot({path:'output/playwright/thumb-wheel.png'});return {right,left,blocked,box,layouts};
+}

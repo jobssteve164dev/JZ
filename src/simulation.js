@@ -1,7 +1,7 @@
 import {at,nearest} from './routes.js';
 import {updateOvertake,updateMeeting,prompt} from './maneuvers.js';
 import {LightingControls,LightStalk} from './lights.js';
-import {checkLane,laneNumber,curbGap,checkDirection} from './lanes.js';
+import {checkLane,laneNumber,curbGap,checkDirection,laneStage,lateralPosition} from './lanes.js';
 import {trafficSignal} from './traffic-signals.js';
 export {lightPhase} from './traffic-signals.js';
 export const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
@@ -87,9 +87,13 @@ export class Simulation{
         if(this.progress>=(e.assessmentStart??e.s))e.peakSpeed=Math.max(e.peakSpeed,this.speed*3.6);
         e.braked ||= this.time-this.braked<1;
         e.lookLeft ||= this.time-this.looks.left<2;e.lookRight ||= this.time-this.looks.right<2;
-        if(!e.entered){e.entered=true;e.startOffset=this.offset;}
+        if(!e.entered){e.entered=true;e.lateralStage=laneStage(this.route,e.s);}
+        if(e.kind==='meet'&&this.progress<e.s&&e.lateralStage)e.approachLateral=lateralPosition(this.route,this.position,e.lateralStage);
         if(e.laneChange){const lane=laneNumber(this.route,this.position,e.laneChange);(e.lanesSeen??=new Set()).add(lane);e.endLane=lane;}
-        e.maxOffset=Math.max(e.maxOffset??0,Math.abs(this.offset));e.endOffset=this.offset;
+        if(e.kind==='straight'&&this.progress>=e.s&&e.lateralStage){
+          const lateral=lateralPosition(this.route,this.position,e.lateralStage);e.straightLateral??=lateral;
+          e.maxDeviation=Math.max(e.maxDeviation??0,Math.abs(lateral-e.straightLateral));
+        }
         if(this.progress>=e.s&&!e.arrowChecked){e.arrowChecked=true;
           if(!checkDirection(this,e))this.fail(`${e.id}-arrow`,`${e.label}：当前车道导向不允许此方向`);
         }
@@ -123,8 +127,7 @@ export class Simulation{
     if(['right','left'].includes(e.kind)&&!(e.direction==='left'?e.lookLeft:e.lookRight))this.fail(`${key}-look`,`${e.label}：未观察${e.direction==='left'?'左':'右'}后方`);
     if(['right','left'].includes(e.kind)&&e.peakSpeed>=30)this.fail(`${key}-speed`,`${e.label}：转弯时未减速至 30 km/h 以下`);
     if(e.kind==='uturn'&&e.peakSpeed>25)this.fail(`${key}-speed`,`${e.label}：掉头速度过快`);
-    if(e.kind==='straight'&&(e.maxOffset??0)>1.2*this.route.scale)this.fail(`${key}-line`,'直线行驶：车身偏移过大');
-    if(['change','overtake'].includes(e.kind)&&(Math.abs(e.endOffset??0)>1.5*this.route.scale||(e.maxOffset??0)>2.5*this.route.scale))this.fail(`${key}-path`,`${e.label}：未按要求驶入目标车道`);
+    if(e.kind==='straight'&&(e.maxDeviation??0)>1.2*this.route.scale)this.fail(`${key}-line`,'直线行驶：车身偏移过大');
     if(e.laneChange&&(!e.lanesSeen?.has(e.laneChange.from)||!e.lanesSeen?.has(e.laneChange.to)||e.endLane!==(e.laneChange.back??e.laneChange.to)))this.fail(`${key}-lane`,`${e.label}：未完成要求的车道变化或回位`);
     if(e.returnS!==undefined&&!e.returnSignal)this.fail(`${key}-return`,`${e.label}：返回原车道前未打右灯并观察`);
     e.status=this.faults.some(f=>f.key.startsWith(key))?'failed':'passed';
