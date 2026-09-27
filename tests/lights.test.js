@@ -1,6 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const m=await import('../src/lights.js').catch(()=>({}));
+test('standalone practice shuffles all prompts and road sessions draw only five unique prompts',()=>{
+ const original=Math.random;try{
+  Math.random=()=>0;
+  const a=new m.LightingExam('practice',{standalone:true});
+  assert.equal(new Set(a.order).size,19);assert.notDeepEqual(a.order,Array.from({length:19},(_,i)=>i));
+  for(const mode of ['practice','exam','learn']){const e=new m.LightingExam(mode);assert.equal(e.order.length,5);assert.equal(new Set(e.order).size,5);}
+  const first=new m.LightingExam('exam').order;Math.random=()=>.999;
+  assert.notDeepEqual(new m.LightingExam('exam').order,first);
+ }finally{Math.random=original;}
+});
+test('stalk rotary, latched high beam and spring-return flash operate the actual lamps',()=>{
+ assert.equal(typeof m.LightStalk,'function','missing physical stalk');
+ const exam=new m.LightingExam(),stalk=new m.LightStalk(exam);
+ stalk.rotate(2);assert.equal(exam.beam,'low');stalk.push();assert.equal(exam.beam,'high');stalk.push();assert.equal(exam.beam,'low');
+ exam.startQuestion(10);stalk.pull();assert.equal(exam.beam,'high');stalk.release();assert.equal(exam.beam,'low');assert.equal(exam.check(),false);
+ stalk.pull();stalk.release();assert.equal(exam.check(),true);
+ exam.startQuestion(16);stalk.rotate(1);assert.equal(exam.check(),false);stalk.hazard();assert.equal(exam.check(),true);
+ stalk.rotate(0);assert.equal(exam.beam,'off');assert.equal(exam.hazard,true,'rotary must not switch hazard off');
+ stalk.hazard();exam.startQuestion(18);assert.equal(exam.check(),true);
+});
 test('all 19 source-image lighting prompts retain their required operations',()=>{
  assert.equal(typeof m.LightingExam,'function','missing pre-drive lighting exam');
  assert.equal(m.questions.length,19);
