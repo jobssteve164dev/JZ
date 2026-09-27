@@ -1,6 +1,6 @@
 import {at,nearest} from './routes.js';
 import {LightingControls,LightStalk} from './lights.js';
-import {checkLane,laneNumber,curbGap} from './lanes.js';
+import {checkLane,laneNumber,curbGap,checkDirection} from './lanes.js';
 export const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 export const angle=n=>Math.atan2(Math.sin(n),Math.cos(n));
 export function lightPhase(time,offset=0){const t=(time+offset)%60;return t<30?'red':t<56?'green':'yellow';}
@@ -75,6 +75,7 @@ export class Simulation{
         if(e.laneChange){const lane=laneNumber(this.route,this.position,e.laneChange);(e.lanesSeen??=new Set()).add(lane);e.endLane=lane;}
         e.maxOffset=Math.max(e.maxOffset??0,Math.abs(this.offset));e.endOffset=this.offset;
         if(this.progress>=e.s&&!e.checked){e.checked=true;
+          if(!checkDirection(this,e))this.fail(`${e.id}-arrow`,`${e.label}：当前车道导向不允许此方向`);
           if(e.direction&&e.kind!=='start')this.checkSignal(e);
         }
         if(e.returnS!==undefined&&this.progress>e.returnS&&this.signalReady('right')&&this.time-this.looks.right<8)e.returnSignal=true;

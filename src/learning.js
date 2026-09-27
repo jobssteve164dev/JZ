@@ -1,3 +1,4 @@
+import {parkingOffset} from './lanes.js';
 import {at} from './routes.js';
 import {angle,clamp,lightPhase} from './simulation.js';
 
@@ -20,12 +21,12 @@ export class LearningDriver{
   }
   const pending=s.events.find(e=>e.status==='pending'&&e.kind!=='start'&&e.direction),park=s.progress>r.length-35;
   const ahead=Math.max(3,s.speed*1.1),target=at(r,s.progress+ahead);
-  if(park){const offset=2.25*r.scale-.9-.2;target.x+=Math.cos(target.heading)*offset;target.z+=Math.sin(target.heading)*offset;}
+  if(park){const offset=parkingOffset(r);target.x+=Math.cos(target.heading)*offset;target.z+=Math.sin(target.heading)*offset;}
   const error=angle(Math.atan2(target.x-s.position.x,s.position.z-target.z)-s.heading);
   const steer=clamp(Math.atan(2*2.7*Math.sin(error)/ahead)/.52,-1,1);
   let speed=Math.abs(angle(at(r,s.progress+15).heading-s.heading))>.12?2.2:5;
   let signal=s.started?'off':'left';
-  if(pending&&pending.s-s.progress<65&&pending.direction)signal=pending.direction;
+  if(pending&&s.progress>(pending.signalS??pending.s-65)&&pending.direction)signal=pending.direction;
   if(pending?.returnS!==undefined&&s.progress>pending.returnS)signal='right';
   if(s.progress>r.parkingStart)signal='right';
   if(s.signal!==signal)s.action('signal',signal);

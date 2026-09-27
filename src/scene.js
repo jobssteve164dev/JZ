@@ -3,7 +3,9 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {at} from './routes.js';
 import {lightPhase} from './simulation.js';
 import {VehicleLights} from './vehicle-lights.js';
-import {laneEdges,inJunction} from './lanes.js';
+import {buildRoadSurface} from './road-markings.js';
+import {laneStage,lateralPosition} from './lanes.js';
+import {sectionForPosition,roadSection} from './road-layout.js';
 export class DrivingScene{
  constructor(canvas){
   this.renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
@@ -26,39 +28,22 @@ export class DrivingScene{
  }
  build(route){
   this.vehicleLights?.dispose();
-  while(this.world.children.length){const child=this.world.children[0];child.traverse(o=>{o.geometry?.dispose();if(o.material?.map){o.material.map.dispose();o.material.dispose();}});this.world.remove(child);}
+  while(this.world.children.length){const child=this.world.children[0];child.traverse(o=>{o.geometry?.dispose();if(o.material?.map){o.material.map.dispose();o.material.dispose();}else if(o.material&&o.parent===this.roadSurface)o.material.dispose();});this.world.remove(child);}
   this.route=route;this.lights=[];const k=route.scale;
   this.box(0,-.5,-200,5000,.5,5000,'#93af8e');
-  for(const [x1,z1,x2,z2] of route.roads){
+  for(const [roadIndex,[x1,z1,x2,z2]] of route.roads.entries()){
     const vertical=x1===x2,l=Math.hypot(x2-x1,z2-z1),x=(x1+x2)/2,z=(z1+z2)/2;
-    this.box(x,-.12,z,vertical?36*k:l, .14,vertical?l:36*k,'#bbc2bd');
-    this.box(x,.015,z,vertical?32*k:l,.07,vertical?l:32*k,'#566269');
-    for(const side of [-15.25,15.25]){if(vertical)this.line({x:x+side*k,z:z1},{x:x+side*k,z:z2},.16*k,'#f3f0df');else this.line({x:x1,z:z+side*k},{x:x2,z:z+side*k},.16*k,'#f3f0df');}
-    for(let s=0;s<l;s+=10*k){const px=x1+(x2-x1)*s/l,pz=z1+(z2-z1)*s/l;
-      const intersection=inJunction(route,{x:px,z:pz});
-      const roadIndex=route.roads.findIndex(r=>r[0]===x1&&r[1]===z1&&r[2]===x2&&r[3]===z2);
-      const turnEnd=route.medianGaps.some(g=>g.road===roadIndex&&(vertical?pz:px)>=g.from-5*k&&(vertical?pz:px)<=g.to+5*k);
-      if(!intersection){
-        for(const lane of [-laneEdges[2],-laneEdges[1],laneEdges[1],laneEdges[2]])this.box(px+(vertical?lane*k:0),.07,pz+(vertical?0:lane*k),vertical?.13*k:4*k,.02,vertical?4*k:.13*k,'#e2e5df');
-        if(!turnEnd){this.box(px,.22,pz,vertical?6*k:10*k,.35,vertical?10*k:6*k,'#7e9d59');}
-      }
-    }
     for(let s=30*k;s<l;s+=60*k){const px=x1+(x2-x1)*s/l,pz=z1+(z2-z1)*s/l;
       for(const side of [-1,1]){
-        const tx=px+(vertical?side*23*k:0),tz=pz+(vertical?0:side*23*k);
+        const direction=vertical?(side>0?'N':'S'):(side>0?'E':'W'),edge=roadSection(route.id,roadIndex,direction,(vertical?pz:px)/k).edges.at(-1)+8;
+        const tx=px+(vertical?side*edge*k:0),tz=pz+(vertical?0:side*edge*k);
         if(route.junctions.some(([jx,jz])=>Math.hypot(jx-tx,jz-tz)<40*k))continue;
         this.box(tx,2.5,tz,.5,5,.5,'#675e4b');const crown=new THREE.Mesh(new THREE.IcosahedronGeometry(3.5,0),this.material('#527e59'));crown.position.set(tx,6,tz);this.world.add(crown);
         if(side===-1){this.box(tx- (vertical?15*k:0),8,tz-(vertical?0:15*k),vertical?14*k:24*k,16,vertical?24*k:14*k,'#d0d8d2');}
       }
     }
   }
-  for(const [x,z] of route.junctions){
-    this.box(x,.04,z,32*k,.06,32*k,'#566269');
-    for(const side of [-1,1])for(let v=-14;v<=14;v+=2.4){
-      this.box(x+v*k,.085,z+side*20*k,1.3*k,.02,4*k,'#e8ede6');
-      this.box(x+side*20*k,.085,z+v*k,4*k,.02,1.3*k,'#e8ede6');
-    }
-  }
+  this.roadSurface=buildRoadSurface(route);this.world.add(this.roadSurface);
   this.guidance=new THREE.Group();this.world.add(this.guidance);
   for(let s=0;s<3000;s+=9){const p=at(route,s);const shape=new THREE.Shape();shape.moveTo(0,1.3);shape.lineTo(-.7,-.6);shape.lineTo(0,0);shape.lineTo(.7,-.6);shape.closePath();const m=new THREE.Mesh(new THREE.ShapeGeometry(shape),new THREE.MeshBasicMaterial({color:'#65e0c4',side:THREE.DoubleSide,transparent:true,opacity:.8}));m.rotation.x=-Math.PI/2;m.rotation.z=-p.heading;m.position.set(p.x,.13,p.z);this.guidance.add(m);}
   for(const e of route.events){
@@ -70,11 +55,13 @@ export class DrivingScene{
   }
   for(const l of route.lights){
     const p=l.point,right={x:Math.cos(p.heading),z:Math.sin(p.heading)};
-    const x=p.x+right.x*6*k,z=p.z+right.z*6*k;
+    const stage=laneStage(route,l.s),section=stage?sectionForPosition(route,p,stage):null,d=stage?lateralPosition(route,p,stage):0,edge=section?section.edges.at(-1)*k-d+2*k:6*k;
+    const x=p.x+right.x*edge,z=p.z+right.z*edge;
     this.box(x,3,z,.2,6,.2,'#6d7777');this.box(x,6.7,z,1.1,3.2,.6,'#202d32');
     const bulbs=['red','yellow','green'].map((c,i)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(.34,10,8),new THREE.MeshBasicMaterial({color:'#273a38'}));m.position.set(x,7.7-i,z);this.world.add(m);return m;});
     this.lights.push({...l,bulbs});
-    this.line({x:p.x-right.x*3*k,z:p.z-right.z*3*k},{x:p.x+right.x*5*k,z:p.z+right.z*5*k},.4,'#ffffff',.10);
+    const inner=section?section.edges[0]*k-d:-3*k,outer=section?section.edges.at(-1)*k-d:5*k;
+    this.line({x:p.x+right.x*inner,z:p.z+right.z*inner},{x:p.x+right.x*outer,z:p.z+right.z*outer},.4,'#ffffff',.14);
   }
   const end=at(route,3000);this.text('考试终点',end.x+Math.cos(end.heading)*6*k,end.z+Math.sin(end.heading)*6*k,end.heading,'#28665b');
   if(route.id===1)this.text('车辆管理所',-190*k,150*k,0,'#245e80',30);

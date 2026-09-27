@@ -1,3 +1,4 @@
+import {parkingOffset} from '../src/lanes.js';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {Simulation,angle,clamp,lightPhase} from '../src/simulation.js';import {getRoute,at} from '../src/routes.js';
 // Drives through the real controls and physics. No state assignment or teleporting.
@@ -7,12 +8,12 @@ function drive(id){
   const pending=s.events.find(e=>e.status==='pending'&&e.kind!=='start');
   const park=s.progress>r.length-35;
   const target=at(r,Math.min(3000,s.progress+Math.max(3,s.speed*1.1)));
-  if(park){const offset=2.25*r.scale-.9-.2;target.x+=Math.cos(target.heading)*offset;target.z+=Math.sin(target.heading)*offset;}
+  if(park){const offset=parkingOffset(r);target.x+=Math.cos(target.heading)*offset;target.z+=Math.sin(target.heading)*offset;}
   const error=angle(Math.atan2(target.x-s.position.x,s.position.z-target.z)-s.heading);
   const steer=clamp(Math.atan(2*2.7*Math.sin(error)/Math.max(3,s.speed*1.1))/.52,-1,1);
   let speed=5;
   const lookahead=at(r,s.progress+15);if(Math.abs(angle(lookahead.heading-s.heading))>.12)speed=2.2;
-  if(pending&&pending.s-s.progress<65&&pending.direction&&s.signal!==pending.direction&&!(pending.returnS!==undefined&&s.progress>pending.returnS))s.action('signal',pending.direction);
+  if(pending&&s.progress>(pending.signalS??pending.s-65)&&pending.direction&&s.signal!==pending.direction&&!(pending.returnS!==undefined&&s.progress>pending.returnS))s.action('signal',pending.direction);
   if(pending?.returnS!==undefined&&s.progress>pending.returnS&&s.signal!=='right')s.action('signal','right');
   if(park&&s.signal!=='right')s.action('signal','right');
   s.action('look','left');s.action('look','right');
