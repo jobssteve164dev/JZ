@@ -19,7 +19,7 @@ test('straight driving accepts a steady legal position away from the guide',()=>
 });
 test('meeting accepts rightward movement and returning to actual starting position',()=>{
  const s=new Simulation(getRoute(10),'exam'),e=s.events.find(e=>e.kind==='meet');s.events=[e];
- place(s,e.s-34,-.6);s.step(.05);place(s,e.s,-.6);s.step(.05);s.action('look','left');s.action('look','right');s.step(.05,{brake:.5});
+ place(s,e.s-34,-.6);s.step(.05);place(s,e.s-.1,-.6);s.step(.05);place(s,e.s,-.6);s.step(.05);s.action('look','left');s.action('look','right');s.step(.05,{brake:.5});
  place(s,e.s+1,0);s.step(.05);place(s,e.endS+1,-.6);s.step(.05);
  assert.equal(e.status,'passed',JSON.stringify(s.faults));
 });

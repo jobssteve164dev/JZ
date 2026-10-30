@@ -6,7 +6,7 @@ const sections=[
  [1,0,'N',180,3],[1,0,'N',35,4],[1,2,'E',-300,2],[1,2,'E',-35,3],[1,4,'W',-180,2],
  [1,1,'N',-140,3],[1,1,'N',-270,5],[1,1,'S',-40,5],[1,1,'S',40,4],[1,1,'S',180,3],[1,1,'S',290,3],[1,1,'S',620,5],
  [9,0,'W',650,3],[9,0,'W',35,5],[9,1,'N',-35,4],[9,1,'N',-180,3],[9,1,'N',-940,3],[9,1,'N',-1030,5],[9,1,'S',-480,3],[9,1,'S',-35,5],[9,0,'E',35,3],
- [10,0,'E',-550,3],[10,0,'E',-35,5],[10,1,'N',-35,4],[10,1,'N',-180,3],[10,1,'N',-935,3],[10,1,'N',-1020,5],[10,1,'S',-35,5],[10,0,'W',-35,4],[10,0,'W',-180,3]
+ [10,0,'E',-550,4],[10,0,'E',-35,5],[10,1,'N',-35,4],[10,1,'N',-180,3],[10,1,'N',-935,3],[10,1,'N',-1020,5],[10,1,'S',-35,5],[10,0,'W',-35,4],[10,0,'W',-180,3]
 ];
 for(const [id,road,dir,along,count]of sections)test(`image ${id} road ${road} ${dir}@${along}: ${count} real lanes`,()=>{
  assert.equal(typeof layout.roadSection,'function','missing variable road cross-section');
@@ -50,4 +50,12 @@ test('outer edge belongs to the last lane and positions beyond it are outside th
  const {laneNumber}=await import('../src/lanes.js'),r=getRoute(1),stage={road:0,direction:'N'},k=r.scale;
  assert.equal(laneNumber(r,{x:(-380+16.5)*k,z:40*k},stage),4);
  assert.equal(laneNumber(r,{x:(-380+16.6)*k,z:40*k},stage),0);
+});
+test('route 10 shared start and finish road visibly narrows from four lanes to three',()=>{
+ const start=layout.roadSection(10,0,'E',-550),afterStart=layout.roadSection(10,0,'E',-400);
+ const finish=layout.roadSection(10,0,'W',-60),afterFinish=layout.roadSection(10,0,'W',-180);
+ assert.equal(start.count,4);assert.equal(afterStart.count,3);
+ assert.equal(finish.count,4);assert.equal(afterFinish.count,3);
+ assert.ok(start.edges.at(-1)>afterStart.edges.at(-1));
+ assert.ok(finish.edges.at(-1)>afterFinish.edges.at(-1));
 });

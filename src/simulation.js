@@ -80,8 +80,10 @@ export class Simulation{
     }
     for(const e of this.events){
       if(e.status!=='pending'||e.kind==='park')continue;
-      if(e.kind==='overtake'&&!e.prewarned&&this.progress>=e.s-80){e.prewarned=true;prompt(this,e,'prepare','前方超车，左灯满三秒，观察左后方。');}
-      if(e.kind==='meet'&&!e.prewarned&&this.progress>=e.s-40){e.prewarned=true;e.preparationTime=this.time;prompt(this,e,'prepare','前方会车，减速并左右观察，五秒内靠右及回正。');}
+      const activeManeuver=this.events.find(x=>x.status==='pending'&&(x.meetingEntered||x.overtakeEntered));
+      const maneuverAvailable=!activeManeuver||activeManeuver===e;
+      if(e.kind==='overtake'&&maneuverAvailable&&!e.prewarned&&this.progress>=e.s-80){e.prewarned=true;prompt(this,e,'prepare','前方超车，左灯满三秒，观察左后方。');}
+      if(e.kind==='meet'&&maneuverAvailable&&!e.prewarned&&this.progress>=e.s-40){e.prewarned=true;e.preparationTime=this.time;prompt(this,e,'prepare','前方会车，减速并左右观察，五秒内靠右及回正。');}
       const begin=e.kind==='start'?0:e.s-35,end=e.endS;
       if(this.progress>=begin&&(this.progress<=end||['overtake','meet'].includes(e.kind))){
         if(this.progress>=(e.assessmentStart??e.s))e.peakSpeed=Math.max(e.peakSpeed,this.speed*3.6);
@@ -105,8 +107,8 @@ export class Simulation{
         }
         if(e.kind!=='overtake'&&e.returnS!==undefined&&this.progress>e.returnS&&this.signalReady('right')&&this.time-this.looks.right<8)e.returnSignal=true;
       }
-      if(e.kind==='meet'){if(this.progress>=e.s)updateMeeting(this,e);}
-      else if(e.kind==='overtake'){if(this.progress>=e.s)updateOvertake(this,e);}
+      if(e.kind==='meet'){if(maneuverAvailable&&this.progress>=e.s)updateMeeting(this,e);}
+      else if(e.kind==='overtake'){if(maneuverAvailable&&this.progress>=e.s)updateOvertake(this,e);}
       else if(this.progress>end){this.evaluate(e);}
     }
     this.parkingReady=this.progress>=this.route.length-20;
@@ -128,7 +130,8 @@ export class Simulation{
     if(['right','left'].includes(e.kind)&&e.peakSpeed>=30)this.fail(`${key}-speed`,`${e.label}：转弯时未减速至 30 km/h 以下`);
     if(e.kind==='uturn'&&e.peakSpeed>25)this.fail(`${key}-speed`,`${e.label}：掉头速度过快`);
     if(e.kind==='straight'&&(e.maxDeviation??0)>1.2*this.route.scale)this.fail(`${key}-line`,'直线行驶：车身偏移过大');
-    if(e.laneChange&&(!e.lanesSeen?.has(e.laneChange.from)||!e.lanesSeen?.has(e.laneChange.to)||e.endLane!==(e.laneChange.back??e.laneChange.to)))this.fail(`${key}-lane`,`${e.label}：未完成要求的车道变化或回位`);
+    const extraOvertakeLane=e.kind==='overtake'&&[...(e.lanesSeen??[])].some(lane=>lane!==e.laneChange.from&&lane!==e.laneChange.to);
+    if(e.laneChange&&(!e.lanesSeen?.has(e.laneChange.from)||!e.lanesSeen?.has(e.laneChange.to)||extraOvertakeLane||e.endLane!==(e.laneChange.back??e.laneChange.to)))this.fail(`${key}-lane`,`${e.label}：未完成要求的车道变化或回位`);
     if(e.returnS!==undefined&&!e.returnSignal)this.fail(`${key}-return`,`${e.label}：返回原车道前未打右灯并观察`);
     e.status=this.faults.some(f=>f.key.startsWith(key))?'failed':'passed';
   }

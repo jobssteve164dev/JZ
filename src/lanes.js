@@ -13,8 +13,13 @@ export function attachLaneRules(route){
  if(route.id!==1)route.medianGaps.push({road:0,from:62*route.scale,to:78*route.scale},{road:0,from:-78*route.scale,to:-62*route.scale});
  for(const [index,[from,to,end,back,returnIndex]]of Object.entries(plan.changes)){
   const e=route.events[index],stage=route.laneStages.find(l=>e.s>=l.from-.01&&e.s<=l.to+.01);
-  const startSection=sectionForPosition(route,e.point,stage),endSection=sectionForPosition(route,route.keyPath[end],stage);
-  e.laneChange={from:semanticLane(from,startSection.count),to:semanticLane(to,endSection.count),back:back&&semanticLane(back,endSection.count),road:stage.road,direction:stage.direction};e.endS=route.keyPath[end].s+8;
+  const target=route.keyPath[returnIndex??end];
+  e.laneChange={
+   from:laneNumber(route,e.point,stage),
+   to:laneNumber(route,target,stage),
+   back:back&&laneNumber(route,route.keyPath[end],stage),
+   road:stage.road,direction:stage.direction
+  };e.endS=route.keyPath[end].s+8;
   if(back)e.returnS=route.keyPath[returnIndex].s;
   e.hint=`先观察后方，打${e.direction==='left'?'左':'右'}灯满 3 秒，从${from===3?'最右侧车道':laneNames[from]}进入${laneNames[to]}。${back?'听到返回提示后重新观察右后方，右灯满 3 秒再返回'+laneNames[back]+'。':'完成后关闭转向灯。'}`;
  }
