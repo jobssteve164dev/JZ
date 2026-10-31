@@ -64,3 +64,9 @@ test('route 10 starts with an adjacent lane change as four lanes narrow to three
  assert.deepEqual([e.laneChange.from,e.laneChange.to],[4,3]);
  assert.equal(laneNumber(r,finish,e.laneChange),3);
 });
+test('route 10 stays in the surviving third lane through the full start taper',()=>{
+ const r=getRoute(10),e=r.events.find(e=>e.kind==='change'),stage=e.lateralStage??r.laneStages.find(l=>e.s>=l.from&&e.s<=l.to);
+ const lanes=new Set();
+ for(let s=r.keyPath[1].s;s<=r.keyPath[3].s;s++)lanes.add(laneNumber(r,at(r,s),stage));
+ assert.deepEqual([...lanes],[4,3]);
+});

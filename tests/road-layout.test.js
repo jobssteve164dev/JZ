@@ -59,3 +59,8 @@ test('route 10 shared start and finish road visibly narrows from four lanes to t
  assert.ok(start.edges.at(-1)>afterStart.edges.at(-1));
  assert.ok(finish.edges.at(-1)>afterFinish.edges.at(-1));
 });
+test('route 10 start taper removes the outside lane shown in the reference image',()=>{
+ const full=layout.roadSection(10,0,'E',-510),taper=layout.roadSection(10,0,'E',-450);
+ assert.deepEqual(full.edges,[3,7,11,15,19.25]);
+ assert.deepEqual(taper.edges,[3,7,11,15.125,17.25]);
+});

@@ -27,7 +27,7 @@ const profiles={
   [1,'N',-940,[L,L,null]],[1,'N',-410,[S,S,S]],[1,'S',-490,[S,S,S]]
  ]},
  10:{two:[],yellow:[],zones:[
-  [0,'E',-550,'out',4,140,60],
+  [0,'E',-550,'out',4,140,60,'outer'],
   [0,'E',0,'in',5,180,110],[0,'W',0,'in',5,150,100],[1,'S',0,'in',5,160,105],
   [1,'N',0,'in',4,140,80],[1,'N',0,'out',4,100,40],[0,'W',0,'out',4,140,60]
  ],bands:[[1,'N',-1040,-1002,5],[1,'S',-1040,-1002,4]],rows:[
@@ -41,18 +41,18 @@ const profiles={
 const edgesFor=(count,median)=>Array.from({length:count+1},(_,i)=>median+4*i+(i===count?.25:0));
 export function roadSection(id,road,direction,along){
  const p=profiles[id],base=p.two.includes(road)?2:3,median=p.yellow.includes(road)?.25:3;
- let count=base,blend=0,approach=null;
- for(const [r,d,at,kind,n,start,full]of p.zones){
+ let count=base,blend=0,approach=null,taperAnchor='inner';
+ for(const [r,d,at,kind,n,start,full,anchor]of p.zones){
   if(r!==road||d!==direction)continue;
   const distance=(kind==='in'?at-along:along-at)*sign(d);
-  if(distance>=0&&distance<start){count=n;blend=Math.min(1,(start-distance)/(start-full));if(kind==='in')approach={start,distance};break;}
+  if(distance>=0&&distance<start){count=n;blend=Math.min(1,(start-distance)/(start-full));taperAnchor=anchor??'inner';if(kind==='in')approach={start,distance};break;}
  }
  for(const [r,d,from,to,n]of p.bands)if(r===road&&d===direction&&along>=from&&along<=to){count=n;blend=id===1?1:Math.min(1,(to-along)/20);}
  const baseEdges=edgesFor(base,median),target=edgesFor(count,median);
  let edges=target;
  if(count!==base&&blend<1){
   // Added lanes branch from existing boundaries instead of appearing across the whole road.
-  const start=count-base===2?[baseEdges[0],...baseEdges,baseEdges.at(-1)]:[baseEdges[0],...baseEdges];
+  const start=count-base===2?[baseEdges[0],...baseEdges,baseEdges.at(-1)]:taperAnchor==='outer'?[...baseEdges,baseEdges.at(-1)]:[baseEdges[0],...baseEdges];
   edges=target.map((v,i)=>start[i]+(v-start[i])*blend);
  }
  return {edges,count,base,median,blend,approach,taper:count!==base&&blend<1};
