@@ -39,7 +39,7 @@ const profiles={
  ]}
 };
 const edgesFor=(count,median,widthCount=count)=>Array.from({length:count+1},(_,i)=>median+4*widthCount*i/count+(i===count?.25:0));
-const stableEdgesFor=(count,base,median)=>edgesFor(count,median,count===4&&base===3?3:count);
+const stableEdgesFor=(count,base,median)=>edgesFor(count,median,base);
 export function roadSection(id,road,direction,along){
  const p=profiles[id],base=p.two.includes(road)?2:3,median=p.yellow.includes(road)?.25:3;
  let count=base,blend=0,approach=null,taperAnchor='inner';

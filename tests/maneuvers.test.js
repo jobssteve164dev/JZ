@@ -15,6 +15,35 @@ test('entering the original lane before the right signal has held for three seco
  const {s,e}=fixture();place(s,e.returnS+1);s.step(.05);place(s,e.endS-8);s.signal='right';s.signalAge=1;s.looks.right=s.time;s.step(.05);
  assert.ok(s.faults.some(f=>f.key===`${e.id}-return-signal`));
 });
+test('automatic signal cancellation does not erase a completed three-second return signal',()=>{
+ const {s,e}=fixture();place(s,e.returnS+1);s.step(.05);
+ s.action('signal','right');s.signalAge=3;s.action('look','right');s.step(.05);
+ s.signalTurned=true;s.step(.05);assert.equal(s.signal,'off');
+ place(s,e.endS-8);s.step(.05);
+ assert.equal(s.faults.some(f=>f.key===`${e.id}-return-signal`),false);
+ assert.equal(e.returnSignal,true);
+});
+test('a short second automatic cancellation does not erase an earlier completed return signal',()=>{
+ const {s,e}=fixture();place(s,e.returnS+1);s.step(.05);
+ s.action('signal','right');s.signalAge=3;s.action('look','right');s.signalTurned=true;s.step(.05);assert.equal(s.signal,'off');
+ s.action('signal','right');s.signalAge=.5;s.signalTurned=true;s.step(.05);assert.equal(s.signal,'off');
+ place(s,e.endS-8);s.step(.05);
+ assert.equal(s.faults.some(f=>f.key===`${e.id}-return-signal`),false);
+ assert.equal(e.returnSignal,true);
+});
+test('an automatically cancelled right signal from before the return instruction does not count',()=>{
+ const {s,e}=fixture();s.action('signal','right');s.signalAge=3;s.signalTurned=true;s.step(.05);assert.equal(s.signal,'off');
+ place(s,e.returnS+1);s.step(.05);s.action('look','right');
+ place(s,e.endS-8);s.step(.05);
+ assert.ok(s.faults.some(f=>f.key===`${e.id}-return-signal`));
+});
+test('manually cancelling a prepared return signal still requires a new three-second signal',()=>{
+ const {s,e}=fixture();place(s,e.returnS+1);s.step(.05);
+ s.action('signal','right');s.signalAge=3;s.action('look','right');s.step(.05);
+ s.action('signal','right');assert.equal(s.signal,'off');
+ place(s,e.endS-8);s.step(.05);
+ assert.ok(s.faults.some(f=>f.key===`${e.id}-return-signal`));
+});
 test('return needs a new right-side observation after the return instruction',()=>{
  const {s,e}=fixture();s.looks.right=s.time;place(s,e.returnS+1);s.step(.05);place(s,e.endS-8);s.signal='right';s.signalAge=4;s.step(.05);
  assert.ok(s.faults.some(f=>f.key===`${e.id}-return-look`));

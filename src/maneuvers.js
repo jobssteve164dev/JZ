@@ -20,10 +20,11 @@ export function updateOvertake(sim,e){
  if(e.returnPrompted&&!e.returnStarted){
   const passing=e.passingLateral;
   if(lateralPosition(sim.route,sim.position,e.laneChange)>passing+.8){
+   const autoSignal=sim.lastAutoSignal,signalReady=sim.signalReady('right')||autoSignal?.direction==='right'&&autoSignal.age>=3&&autoSignal.time>=e.returnPromptTime&&sim.time-autoSignal.time<=8;
    e.returnStarted=true;
-   if(!sim.signalReady('right'))sim.fail(`${e.id}-return-signal`,'超车：返回原车道前右转向灯未开启满 3 秒');
+   if(!signalReady)sim.fail(`${e.id}-return-signal`,'超车：返回原车道前右转向灯未开启满 3 秒');
    if(sim.looks.right<e.returnPromptTime||sim.time-sim.looks.right>8)sim.fail(`${e.id}-return-look`,'超车：返回原车道前未重新观察右后方');
-   e.returnSignal=sim.signalReady('right')&&sim.looks.right>=e.returnPromptTime&&sim.time-sim.looks.right<=8;
+   e.returnSignal=signalReady&&sim.looks.right>=e.returnPromptTime&&sim.time-sim.looks.right<=8;
   }
  }
  const travelled=sim.distance-e.travelStart;

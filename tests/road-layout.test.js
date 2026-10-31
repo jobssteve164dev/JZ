@@ -61,6 +61,24 @@ const redistributedFourLaneSections=[
  ['route 10 opposite U-turn side',10,1,'S',-1030,-935,[3,6,9,12,15.25]],
  ['route 10 return exit',10,0,'W',-35,-180,[3,6,9,12,15.25]]
 ];
+const connectedJunctionSections=[
+ ['route 1 first southbound exit',1,1,'S',-40,40,15.25],
+ ['route 1 first eastbound road',1,2,'E',-40,40,8.5],
+ ['route 1 first westbound road',1,2,'W',-40,40,8.5],
+ ['route 1 final southbound approach',1,1,'S',620,700,15.25],
+ ['route 9 eastbound side',9,0,'E',-40,40,15.25],
+ ['route 9 westbound side',9,0,'W',-40,40,15.25],
+ ['route 9 southbound side',9,1,'S',-40,40,15.25],
+ ['route 10 eastbound side',10,0,'E',-40,40,15.25],
+ ['route 10 westbound return side',10,0,'W',-40,40,15.25],
+ ['route 10 southbound side',10,1,'S',-40,40,15.25]
+];
+for(const [name,id,road,direction,before,after,outerEdge]of connectedJunctionSections)test(`${name} keeps its road edge connected through the junction`,()=>{
+ const first=layout.roadSection(id,road,direction,before),second=layout.roadSection(id,road,direction,after);
+ assert.notEqual(first.count,second.count);
+ assert.equal(first.edges.at(-1),outerEdge);
+ assert.equal(second.edges.at(-1),outerEdge);
+});
 for(const [name,id,road,direction,fourAt,threeAt,want]of redistributedFourLaneSections)test(`${name} keeps one road width while redistributing three and four lanes`,()=>{
  const four=layout.roadSection(id,road,direction,fourAt),three=layout.roadSection(id,road,direction,threeAt);
  assert.deepEqual(four.edges,want);

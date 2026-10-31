@@ -11,7 +11,7 @@ export class Simulation{
     this.waitForSpeech=waitForSpeech;
     this.route=route;this.mode=mode;this.position=at(route,0);this.heading=this.position.heading;
     this.time=0;this.speed=0;this.distance=0;this.progress=0;this.gear='P';this.handbrake=true;this.belt=false;
-    this.signal='off';this.signalAge=0;this.looks={left:-Infinity,right:-Infinity};this.braked=-Infinity;
+    this.signal='off';this.signalAge=0;this.lastAutoSignal=null;this.looks={left:-Infinity,right:-Infinity};this.braked=-Infinity;
     this.lighting=new LightingControls();this.lightStalk=new LightStalk(this.lighting);this.brakePressed=false;
     this.paused=false;this.finished=false;this.score=100;this.faults=[];this.keys=new Set();
     this.events=route.events.map(e=>({...e,entered:false,status:'pending',peakSpeed:0,braked:false,lookLeft:false,lookRight:false}));
@@ -26,7 +26,10 @@ export class Simulation{
       if(this.speed>.2&&value==='P'){this.message='请停稳后挂 P 挡';return;}
       this.gear=value;
     }
-    if(name==='signal'){this.signal=this.signal===value?'off':value;this.signalAge=0;this.signalHeading=this.heading;this.signalTurned=false;}
+    if(name==='signal'){
+      if(!(this.signal==='off'&&this.lastAutoSignal?.direction===value))this.lastAutoSignal=null;
+      this.signal=this.signal===value?'off':value;this.signalAge=0;this.signalHeading=this.heading;this.signalTurned=false;
+    }
     if(name==='look'&&['left','right'].includes(value))this.looks[value]=this.time;
     if(name==='finish')this.finishParking();
   }
@@ -63,7 +66,11 @@ export class Simulation{
     if(this.signal!=='off'){
       const direction=this.signal==='right'?1:-1;
       if(this.speed>.5&&direction*angle(this.heading-this.signalHeading)>.04&&direction*this.steer>.08)this.signalTurned=true;
-      if(this.signalTurned&&direction*this.steer<=.01){this.signal='off';this.signalAge=0;this.signalTurned=false;}
+      if(this.signalTurned&&direction*this.steer<=.01){
+        const cancelled={direction:this.signal,age:this.signalAge,time:this.time},previous=this.lastAutoSignal;
+        if(!previous||previous.direction!==cancelled.direction||cancelled.age>=3-1e-8||previous.age<3-1e-8)this.lastAutoSignal=cancelled;
+        this.signal='off';this.signalAge=0;this.signalTurned=false;
+      }
     }
     this.position.x+=Math.sin(this.heading)*this.speed*dt;this.position.z-=Math.cos(this.heading)*this.speed*dt;
     this.distance+=this.speed*dt;
