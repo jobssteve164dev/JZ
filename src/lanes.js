@@ -74,6 +74,8 @@ export function checkLane(sim){
  const r=sim.route;if(medianAt(r,sim.position))return {key:'median',text:'越过道路中央分界'};
  const stage=laneStage(r,sim.progress);if(!stage||inJunction(r,sim.position)){sim.examLane=null;return null;}
  const d=lateralPosition(r,sim.position,stage),k=r.scale,section=sectionForPosition(r,sim.position,stage);
+ const parkingPhase=section.parking&&(sim.progress<=r.events[0].endS||sim.progress>=r.parkingStart);
+ if(parkingPhase&&d-.9>=section.edges.at(-2)*k-.08&&d+.9<=section.parking.outer*k+.08){sim.examLane=null;return null;}
  if(sim.mode==='exam'){
   const violation={key:`lane-${stage.id}`,text:'请保持车道，变道前打灯满三秒并观察后方'};
   if(d-.9<section.edges[0]*k-.08||d+.9>section.edges.at(-1)*k+.08)return violation;
@@ -97,9 +99,9 @@ export function checkLane(sim){
  if(d-.9<min-.08||d+.9>max+.08)return {key:`lane-${stage.id}`,text:stage.lanes.length===1?`请保持${laneNames[stage.lanes[0]]}，不要压线或驶入其他车道`:'变道时越出允许车道'};
  return null;
 }
-export function curbGap(route,position){const stage=route.laneStages.at(-1);return sectionForPosition(route,position,stage).edges.at(-1)*route.scale-lateralPosition(route,position,stage)-.9;}
+export function curbGap(route,position){const stage=route.laneStages.at(-1);return sectionForPosition(route,position,stage).roadEdges.at(-1)*route.scale-lateralPosition(route,position,stage)-.9;}
 
-export function parkingOffset(route){return curbGap(route,route.path.at(-1))-.2;}
+export function parkingOffset(route){const point=route.path.at(-1),stage=route.laneStages.at(-1),section=sectionForPosition(route,point,stage);return curbGap(route,point)-(section.parking?.1:.2);}
 export function checkDirection(sim,event){
  const stage=laneStage(sim.route,Math.max(0,event.s-1));if(!stage)return true;
  const along=(['N','S'].includes(stage.direction)?sim.position.z:sim.position.x)/sim.route.scale;

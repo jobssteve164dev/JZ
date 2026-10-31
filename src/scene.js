@@ -35,7 +35,7 @@ export class DrivingScene{
     const vertical=x1===x2,l=Math.hypot(x2-x1,z2-z1),x=(x1+x2)/2,z=(z1+z2)/2;
     for(let s=30*k;s<l;s+=60*k){const px=x1+(x2-x1)*s/l,pz=z1+(z2-z1)*s/l;
       for(const side of [-1,1]){
-        const direction=vertical?(side>0?'N':'S'):(side>0?'E':'W'),edge=roadSection(route.id,roadIndex,direction,(vertical?pz:px)/k).edges.at(-1)+8;
+        const direction=vertical?(side>0?'N':'S'):(side>0?'E':'W'),edge=roadSection(route.id,roadIndex,direction,(vertical?pz:px)/k).roadEdges.at(-1)+8;
         const tx=px+(vertical?side*edge*k:0),tz=pz+(vertical?0:side*edge*k);
         if(route.junctions.some(([jx,jz])=>Math.hypot(jx-tx,jz-tz)<40*k))continue;
         this.box(tx,2.5,tz,.5,5,.5,'#675e4b');const crown=new THREE.Mesh(new THREE.IcosahedronGeometry(3.5,0),this.material('#527e59'));crown.position.set(tx,6,tz);this.world.add(crown);
@@ -55,12 +55,12 @@ export class DrivingScene{
   }
   for(const l of route.lights){
     const p=l.point,right={x:Math.cos(p.heading),z:Math.sin(p.heading)};
-    const stage=laneStage(route,l.s),section=stage?sectionForPosition(route,p,stage):null,d=stage?lateralPosition(route,p,stage):0,edge=section?section.edges.at(-1)*k-d+2*k:6*k;
+    const stage=laneStage(route,l.s),section=stage?sectionForPosition(route,p,stage):null,d=stage?lateralPosition(route,p,stage):0,edge=section?section.roadEdges.at(-1)*k-d+2*k:6*k;
     const x=p.x+right.x*edge,z=p.z+right.z*edge;
     this.box(x,3,z,.2,6,.2,'#6d7777');this.box(x,6.7,z,1.1,3.2,.6,'#202d32');
     const bulbs=['red','yellow','green'].map((c,i)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(.34,10,8),new THREE.MeshBasicMaterial({color:'#273a38'}));m.position.set(x,7.7-i,z);this.world.add(m);return m;});
     this.lights.push({...l,bulbs});
-    const inner=section?section.edges[0]*k-d:-3*k,outer=section?section.edges.at(-1)*k-d:5*k;
+    const inner=section?section.edges[0]*k-d:-3*k,outer=section?section.roadEdges.at(-1)*k-d:5*k;
     this.line({x:p.x+right.x*inner,z:p.z+right.z*inner},{x:p.x+right.x*outer,z:p.z+right.z*outer},.4,'#ffffff',.14);
   }
   const end=at(route,3000);this.text('考试终点',end.x+Math.cos(end.heading)*6*k,end.z+Math.sin(end.heading)*6*k,end.heading,'#28665b');

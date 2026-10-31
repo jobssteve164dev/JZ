@@ -2,7 +2,7 @@
 const sign=d=>['N','W'].includes(d)?-1:1;
 const S=['straight'],L=['left'],R=['right'],SU=['straight','uturn'],SR=['straight','right'];
 const profiles={
- 1:{two:[2,3,4],yellow:[0,2,3,4],zones:[
+ 1:{two:[2,3,4],yellow:[0,2,3,4],parking:[{road:0,direction:'N',width:3,path:[[168,180,0,1],[505,555,1,0]]}],zones:[
   [0,'N',0,'in',4,140,85],[2,'E',0,'in',3,190,120],[2,'W',0,'in',3,130,90],
   [1,'N',-300,'in',5,110,75],[1,'S',0,'in',5,150,105],[1,'S',0,'out',4,140,65],
   [1,'S',660,'in',5,170,100]
@@ -56,7 +56,11 @@ export function roadSection(id,road,direction,along){
   const start=count-base===2?[baseEdges[0],...baseEdges,baseEdges.at(-1)]:taperAnchor==='outer'?[...baseEdges,baseEdges.at(-1)]:[baseEdges[0],...baseEdges];
   edges=target.map((v,i)=>start[i]+(v-start[i])*blend);
  }
- return {edges,count,base,median,blend,approach,taperAnchor,taper:count!==base&&blend<1};
+ const parkingProfile=p.parking?.find(v=>v.road===road&&v.direction===direction),parking=parkingProfile?{inner:baseEdges.at(-1),outer:baseEdges.at(-1)+parkingProfile.width}:null;
+ let parkingBlend=0;
+ for(const [from,to,fromBlend,toBlend]of parkingProfile?.path??[])if(along>=from&&along<=to)parkingBlend=fromBlend+(toBlend-fromBlend)*(along-from)/(to-from);
+ const roadEdges=parking?[...edges,parking.outer]:edges;
+ return {edges,roadEdges,parking,parkingBlend,count,base,median,blend,approach,taperAnchor,taper:count!==base&&blend<1};
 }
 export function semanticLane(lane,count){return lane===1?1:lane===3?count:Math.ceil(count/2);}
 export function sectionLane(section,lane){
@@ -92,7 +96,8 @@ export function remapRoadPoint(spec,id,point,axis=null){
   if(along<Math.min(vertical?r[1]:r[0],vertical?r[3]:r[2])-20||along>Math.max(vertical?r[1]:r[0],vertical?r[3]:r[2])+20||Math.abs(lateral)>15.5||Math.abs(lateral)<3)continue;
   const direction=vertical?(lateral>0?'N':'S'):(lateral>0?'E':'W');
   const center=a=>{
-   const section=roadSection(id,road,direction,a),d=Math.abs(lateral),values=[section.median,laneCenter(section,1),laneCenter(section,2),laneCenter(section,3),section.edges.at(-1)],keys=[3,5,9,13,15.25];
+   const section=roadSection(id,road,direction,a),d=Math.abs(lateral),outerLane=laneCenter(section,3),parkingCenter=section.parking?(section.parking.inner+section.parking.outer)/2:outerLane;
+   const routeOuter=outerLane+(parkingCenter-outerLane)*section.parkingBlend,values=[section.median,laneCenter(section,1),laneCenter(section,2),routeOuter,section.roadEdges.at(-1)],keys=[3,5,9,13,15.25];
    let i=1;while(i<4&&d>keys[i])i++;const t=(d-keys[i-1])/(keys[i]-keys[i-1]);return values[i-1]+(values[i]-values[i-1])*t;
   };
   let value=center(along);
@@ -105,7 +110,7 @@ export function remapRoadPoint(spec,id,point,axis=null){
 export function junctionBounds(route,x,z){
  let left=17,right=17,top=17,bottom=17;
  route.roads.forEach((r,i)=>{
-  if(r[0]===r[2]&&Math.abs(r[0]-x)<.01){left=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'S',z/route.scale+d).edges.at(-1)))+2;right=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'N',z/route.scale+d).edges.at(-1)))+2;}
-  if(r[1]===r[3]&&Math.abs(r[1]-z)<.01){top=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'W',x/route.scale+d).edges.at(-1)))+2;bottom=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'E',x/route.scale+d).edges.at(-1)))+2;}
+  if(r[0]===r[2]&&Math.abs(r[0]-x)<.01){left=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'S',z/route.scale+d).roadEdges.at(-1)))+2;right=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'N',z/route.scale+d).roadEdges.at(-1)))+2;}
+  if(r[1]===r[3]&&Math.abs(r[1]-z)<.01){top=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'W',x/route.scale+d).roadEdges.at(-1)))+2;bottom=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'E',x/route.scale+d).roadEdges.at(-1)))+2;}
  });return {left:left*route.scale,right:right*route.scale,top:top*route.scale,bottom:bottom*route.scale};
 }

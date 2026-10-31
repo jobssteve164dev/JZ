@@ -12,6 +12,20 @@ test('actual road meshes contain direction arrows and redistributed four-lane ap
  assert.ok(approach.intersectObject(g,true).some(hit=>hit.object.name==='road-white'));
  assert.equal(start.intersectObject(g,true).some(hit=>hit.object.name==='road-white'),false);
 });
+test('route 1 renders the parking lane as road surface without giving it a junction arrow',()=>{
+ const r=getRoute(1),g=m.buildRoadSurface(r),k=r.scale;g.updateMatrixWorld(true);
+ const parking=new THREE.Raycaster(new THREE.Vector3((-380+14)*k,10,180*k),new THREE.Vector3(0,-1,0));
+ assert.ok(parking.intersectObject(g,true).some(hit=>hit.object.name==='road-surface'),'ordinary parking lane surface is missing');
+ const junctionParking=new THREE.Raycaster(new THREE.Vector3((-380+14)*k,10,40*k),new THREE.Vector3(0,-1,0));
+ const hits=junctionParking.intersectObject(g,true);
+ assert.ok(hits.some(hit=>hit.object.name==='road-surface'),'junction parking lane surface is missing');
+ assert.equal(hits.some(hit=>hit.object.name==='direction-arrows'),false,'parking lane must not receive a travel arrow');
+});
+test('route 1 parking divider stays straight where three travel lanes begin splitting into four',()=>{
+ const r=getRoute(1),g=m.buildRoadSurface(r),k=r.scale;g.updateMatrixWorld(true);
+ const ray=new THREE.Raycaster(new THREE.Vector3((-380+12.5)*k,10,138*k),new THREE.Vector3(0,-1,0));
+ assert.ok(ray.intersectObject(g,true).some(hit=>hit.object.name==='road-white'),'parking divider bends into the travel-lane split');
+});
 const renderedTransitions=[
  ['route 1 starting approach',1,0,'N',85,140],['route 1 southbound exit',1,1,'S',65,140],
  ['route 9 northbound approach',9,1,'N',80,140],['route 9 northbound exit',9,1,'N',-100,-40],['route 9 opposite U-turn side',9,1,'S',-1026,-1006],

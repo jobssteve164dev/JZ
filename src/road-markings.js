@@ -12,14 +12,15 @@ export function buildRoadSurface(route){
   const vertical=r[0]===r[2],from=(vertical?r[1]:r[0])/k,to=(vertical?r[3]:r[2])/k,pos=vertical?'N':'E',neg=vertical?'S':'W';
   for(let a=from;a<to;a+=4){
    const b=Math.min(to,a+4),mid=(a+b)/2,p0=roadSection(route.id,road,pos,a),p1=roadSection(route.id,road,pos,b),n0=roadSection(route.id,road,neg,a),n1=roadSection(route.id,road,neg,b);
-   for(const [kind,extra,y]of [['shoulder',1.5,-.08],['surface',0,.05]])quad(kind,point(r,a,-n0.edges.at(-1)-extra),point(r,b,-n1.edges.at(-1)-extra),point(r,b,p1.edges.at(-1)+extra),point(r,a,p0.edges.at(-1)+extra),y);
+   for(const [kind,extra,y]of [['shoulder',1.5,-.08],['surface',0,.05]])quad(kind,point(r,a,-n0.roadEdges.at(-1)-extra),point(r,b,-n1.roadEdges.at(-1)-extra),point(r,b,p1.roadEdges.at(-1)+extra),point(r,a,p0.roadEdges.at(-1)+extra),y);
    if(inJunction(route,point(r,mid,0)))continue;
    for(const [d,s0,s1]of [[1,p0,p1],[-1,n0,n1]]){
-    stripe('white',r,a,b,d*s0.edges.at(-1),d*s1.edges.at(-1),.12);
+    stripe('white',r,a,b,d*s0.roadEdges.at(-1),d*s1.roadEdges.at(-1),.12);
     const solid=roadArrows(route.id).some(row=>row.road===road&&row.direction===(d===1?pos:neg)&&Math.abs(row.along-mid)<24&&!s0.taper);
     if(solid||Math.floor((a-from)/4)%3===0){
      const count=Math.min(s0.edges.length,s1.edges.length);for(let i=1;i<count-1;i++)stripe('white',r,a,b,d*s0.edges[i],d*s1.edges[i],.12);
     }
+    if(s0.parking&&s1.parking)stripe('white',r,a,b,d*s0.parking.inner,d*s1.parking.inner,.12);
    }
    if(p0.median<1){stripe('yellow',r,a,b,-.14,-.14,.12);stripe('yellow',r,a,b,.14,.14,.12);}
    else if(!route.medianGaps.some(g=>g.road===road&&mid*k>=g.from&&mid*k<=g.to))quad('median',point(r,a,-3),point(r,b,-3),point(r,b,3),point(r,a,3),.22);

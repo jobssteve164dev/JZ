@@ -8,7 +8,7 @@ const sections=[
  [9,0,'W',650,3],[9,0,'W',35,5],[9,1,'N',-35,4],[9,1,'N',-180,3],[9,1,'N',-940,3],[9,1,'N',-1030,5],[9,1,'S',-480,3],[9,1,'S',-35,5],[9,0,'E',35,3],
  [10,0,'E',-550,4],[10,0,'E',-35,5],[10,1,'N',-35,4],[10,1,'N',-180,3],[10,1,'N',-935,3],[10,1,'N',-1020,5],[10,1,'S',-35,5],[10,0,'W',-35,4],[10,0,'W',-180,3]
 ];
-for(const [id,road,dir,along,count]of sections)test(`image ${id} road ${road} ${dir}@${along}: ${count} real lanes`,()=>{
+for(const [id,road,dir,along,count]of sections)test(`image ${id} road ${road} ${dir}@${along}: ${count} travel lanes`,()=>{
  assert.equal(typeof layout.roadSection,'function','missing variable road cross-section');
  const section=layout.roadSection(id,road,dir,along);assert.equal(section.edges.length-1,count);assert.ok(section.edges.every((n,i,a)=>!i||n>a[i-1]));
 });
@@ -46,10 +46,35 @@ test('drawn pre-junction U-turn arrows have a physical opening in the median',as
  const {medianAt}=await import('../src/lanes.js');
  for(const id of [1,9,10]){const r=getRoute(id);assert.equal(medianAt(r,{x:0,z:-70*r.scale}),false,`route ${id} opening is blocked`);}
 });
-test('outer edge belongs to the last lane and positions beyond it are outside the road',async()=>{
+test('route 1 parking lane stays outside the numbered junction travel lanes',async()=>{
  const {laneNumber}=await import('../src/lanes.js'),r=getRoute(1),stage={road:0,direction:'N'},k=r.scale;
  assert.equal(laneNumber(r,{x:(-380+12.4)*k,z:40*k},stage),4);
  assert.equal(laneNumber(r,{x:(-380+12.6)*k,z:40*k},stage),0);
+});
+test('route 1 keeps a separate parking lane outside three ordinary and four junction travel lanes',()=>{
+ const ordinary=layout.roadSection(1,0,'N',180),junction=layout.roadSection(1,0,'N',40);
+ assert.equal(ordinary.count,3);assert.deepEqual(ordinary.edges,[.25,4.25,8.25,12.5]);
+ assert.deepEqual(ordinary.parking,{inner:12.5,outer:15.5});
+ assert.deepEqual(ordinary.roadEdges,[.25,4.25,8.25,12.5,15.5]);
+ assert.equal(junction.count,4);assert.deepEqual(junction.edges,[.25,3.25,6.25,9.25,12.5]);
+ assert.deepEqual(junction.parking,{inner:12.5,outer:15.5});
+ assert.deepEqual(junction.roadEdges,[.25,3.25,6.25,9.25,12.5,15.5]);
+ assert.equal(layout.roadArrows(1).filter(a=>a.road===0&&a.direction==='N'&&a.along===40).length,4);
+ assert.deepEqual([180,174,168].map(a=>layout.roadSection(1,0,'N',a).parkingBlend),[1,.5,0]);
+ assert.deepEqual([555,530,505].map(a=>layout.roadSection(1,0,'N',a).parkingBlend),[0,.5,1]);
+});
+test('route 1 begins and finishes in the parking lane without numbering it as a travel lane',async()=>{
+ const {laneNumber,laneStage,lateralPosition,curbGap,parkingOffset}=await import('../src/lanes.js'),{at}=await import('../src/routes.js'),r=getRoute(1);
+ for(const [point,progress]of [[r.path[0],0],[r.path.at(-1),r.length]]){
+  const stage=laneStage(r,progress),section=layout.sectionForPosition(r,point,stage);
+  assert.deepEqual(section.parking,{inner:12.5,outer:15.5});
+  const d=lateralPosition(r,point,stage)/r.scale;
+  assert.ok(d>section.parking.inner+.9&&d<section.parking.outer-.9);
+  assert.equal(laneNumber(r,point,stage),0);
+ }
+ assert.ok(Math.abs(curbGap(r,r.path.at(-1))-(1.5*r.scale-.9))<1e-9);
+ const target=at(r,r.length),offset=parkingOffset(r);target.x+=Math.cos(target.heading)*offset;target.z+=Math.sin(target.heading)*offset;
+ assert.ok(Math.abs(curbGap(r,target)-.1)<.005,'parking target must finish about 10 cm from the physical curb');
 });
 const redistributedFourLaneSections=[
  ['route 1 starting approach',1,0,'N',35,180,[.25,3.25,6.25,9.25,12.5]],
