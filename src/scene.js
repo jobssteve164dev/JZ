@@ -93,7 +93,11 @@ export class DrivingScene{
     this.camera.position.set(p.x-Math.cos(h)*.35,1.45,p.z-Math.sin(h)*.35);
     const look=sim.time-sim.looks.left<1?-Math.PI/3:sim.time-sim.looks.right<1?Math.PI/3:0;
     target=new THREE.Vector3(p.x+Math.sin(h+look)*35,1.6,p.z-Math.cos(h+look)*35);
-  }else{this.car.visible=true;this.camera.position.set(p.x-Math.sin(h)*11,6.6,p.z+Math.cos(h)*11);const compact=this.renderer.domElement.clientHeight<550;const ahead=compact?0:12;target=new THREE.Vector3(p.x+Math.sin(h)*ahead,compact?0:1,p.z-Math.cos(h)*ahead);}
+  }else{this.car.visible=true;this.camera.position.set(p.x-Math.sin(h)*11,6.6,p.z+Math.cos(h)*11);const compact=this.renderer.domElement.clientHeight<550,ahead=chaseLookAhead(sim,compact);target=new THREE.Vector3(p.x+Math.sin(h)*ahead,compact?0:1,p.z-Math.cos(h)*ahead);}
   this.camera.lookAt(target);this.renderer.render(this.scene,this.camera);
  }
+}
+
+export function chaseLookAhead(sim,compact){
+ return compact&&sim.events.some(e=>e.kind==='overtake'&&e.status==='pending'&&e.prewarned)?30:compact?0:12;
 }
