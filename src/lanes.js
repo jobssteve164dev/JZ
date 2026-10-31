@@ -1,4 +1,4 @@
-import {sectionForPosition,semanticLane,junctionBounds,allowedMovement} from './road-layout.js';
+import {sectionForPosition,sectionLane,junctionBounds,allowedMovement} from './road-layout.js';
 export const laneNames={1:'内侧车道',2:'中间车道',3:'最右侧车道'};
 // Stage values mean inner (1), middle (2), outer (3); road sections determine actual lane numbers.
 const plans={
@@ -92,7 +92,7 @@ export function checkLane(sim){
   const change=state.transition;
   return change&&to>=1&&to<=section.count&&d-.9>=section.edges[Math.min(change.from,change.to)-1]*k-.08&&d+.9<=section.edges[Math.max(change.from,change.to)]*k+.08?null:violation;
  }
- const lanes=stage.lanes.map(l=>semanticLane(l,section.count));
+ const lanes=stage.lanes.map(l=>sectionLane(section,l));
  const min=section.edges[section.taper?0:Math.min(...lanes)-1]*k,max=section.edges[section.taper?section.count:Math.max(...lanes)]*k;
  if(d-.9<min-.08||d+.9>max+.08)return {key:`lane-${stage.id}`,text:stage.lanes.length===1?`请保持${laneNames[stage.lanes[0]]}，不要压线或驶入其他车道`:'变道时越出允许车道'};
  return null;

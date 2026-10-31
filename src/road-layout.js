@@ -38,7 +38,8 @@ const profiles={
   [1,'N',-925,[L,L,null]],[1,'N',-390,[S,S,S]],[1,'S',-470,[S,S,S]]
  ]}
 };
-const edgesFor=(count,median)=>Array.from({length:count+1},(_,i)=>median+4*i+(i===count?.25:0));
+const edgesFor=(count,median,widthCount=count)=>Array.from({length:count+1},(_,i)=>median+4*widthCount*i/count+(i===count?.25:0));
+const stableEdgesFor=(count,base,median)=>edgesFor(count,median,count===4&&base===3?3:count);
 export function roadSection(id,road,direction,along){
  const p=profiles[id],base=p.two.includes(road)?2:3,median=p.yellow.includes(road)?.25:3;
  let count=base,blend=0,approach=null,taperAnchor='inner';
@@ -47,25 +48,29 @@ export function roadSection(id,road,direction,along){
   const distance=(kind==='in'?at-along:along-at)*sign(d);
   if(distance>=0&&distance<start){count=n;blend=Math.min(1,(start-distance)/(start-full));taperAnchor=anchor??'inner';if(kind==='in')approach={start,distance};break;}
  }
- for(const [r,d,from,to,n]of p.bands)if(r===road&&d===direction&&along>=from&&along<=to){count=n;blend=id===1?1:Math.min(1,(to-along)/20);}
- const baseEdges=edgesFor(base,median),target=edgesFor(count,median);
+ for(const [r,d,from,to,n]of p.bands)if(r===road&&d===direction&&along>=from&&along<to){count=n;blend=id===1?1:Math.min(1,(to-along)/20);}
+ const baseEdges=edgesFor(base,median),target=stableEdgesFor(count,base,median);
  let edges=target;
  if(count!==base&&blend<1){
-  // Added lanes branch from existing boundaries instead of appearing across the whole road.
+  // Transition every internal divider while keeping the median and outside road edges continuous.
   const start=count-base===2?[baseEdges[0],...baseEdges,baseEdges.at(-1)]:taperAnchor==='outer'?[...baseEdges,baseEdges.at(-1)]:[baseEdges[0],...baseEdges];
   edges=target.map((v,i)=>start[i]+(v-start[i])*blend);
  }
- return {edges,count,base,median,blend,approach,taper:count!==base&&blend<1};
+ return {edges,count,base,median,blend,approach,taperAnchor,taper:count!==base&&blend<1};
 }
 export function semanticLane(lane,count){return lane===1?1:lane===3?count:Math.ceil(count/2);}
+export function sectionLane(section,lane){
+ const mapped=semanticLane(lane,section.count);
+ return section.count===4&&section.base===3&&section.taperAnchor==='inner'?Math.min(section.count,mapped+1):mapped;
+}
 export function laneCenter(section,lane){
- const mapped=semanticLane(lane,section.count),target=(section.edges[mapped-1]+section.edges[mapped])/2;
- if(section.taper){
-  const base=edgesFor(section.base,section.median),n=semanticLane(lane,section.base);
-  const from=(base[n-1]+base[n])/2,to=(edgesFor(section.count,section.median)[mapped-1]+edgesFor(section.count,section.median)[mapped])/2;
+ const mapped=sectionLane(section,lane),current=(section.edges[mapped-1]+section.edges[mapped])/2;
+ if(section.taper&&!(section.count===4&&section.base===3&&section.taperAnchor==='inner')){
+  const base=edgesFor(section.base,section.median),target=stableEdgesFor(section.count,section.base,section.median),n=semanticLane(lane,section.base);
+  const from=(base[n-1]+base[n])/2,to=(target[mapped-1]+target[mapped])/2;
   return from+(to-from)*section.blend;
  }
- return target;
+ return current;
 }
 export function roadArrows(id){return profiles[id].rows.flatMap(([road,direction,along,lanes])=>lanes.flatMap((turns,i)=>turns?[{road,direction,along,lane:i+1,turns}]:[]));}
 export function allowedMovement(id,road,direction,along,lane,movement){
@@ -92,7 +97,7 @@ export function remapRoadPoint(spec,id,point,axis=null){
   };
   let value=center(along);
   const crossing=spec.junctions.find(([x,z])=>Math.abs((vertical?x:z)-(vertical?r[0]:r[1]))<.01&&Math.abs(along-(vertical?z:x))<30);
-  if(crossing){const j=vertical?crossing[1]:crossing[0];value=center(j-30)+(center(j+30)-center(j-30))*(along-j+30)/60;}
+  if(crossing){const j=vertical?crossing[1]:crossing[0],t=(along-j+30)/60,smooth=t*t*t*(t*(t*6-15)+10);value=center(j-30)+(center(j+30)-center(j-30))*smooth;}
   result[vertical?'x':'z']=(vertical?r[0]:r[1])+Math.sign(lateral)*value;
  }
  return result;

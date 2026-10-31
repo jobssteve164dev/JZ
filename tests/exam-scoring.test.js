@@ -24,7 +24,7 @@ test('meeting accepts rightward movement and returning to actual starting positi
  assert.equal(e.status,'passed',JSON.stringify(s.faults));
 });
 test('exam allows completing the same lane change earlier within the project area',()=>{
- const s=new Simulation(getRoute(10),'exam'),e=s.events.find(e=>e.kind==='change');s.events=[e];place(s,e.s-10);s.position.z=9*s.route.scale;e.entered=true;
+ const s=new Simulation(getRoute(10),'exam'),e=s.events.find(e=>e.kind==='change');s.events=[e];place(s,e.s-10);s.position.z=10.5*s.route.scale;e.entered=true;
  assert.equal(checkLane(s),null);
 });
 test('wrong target lane still fails even without guide-distance scoring',()=>{
