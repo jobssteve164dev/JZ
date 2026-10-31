@@ -19,6 +19,11 @@ test('meeting acknowledgements cannot extend the timer and pauses do not spend i
 test('without speech the same meeting timer starts immediately',()=>{
  const {s,e}=fixture(false);s.step(4.9);assert.equal(e.status,'pending');s.step(.2);assert.equal(e.status,'failed');
 });
+test('a lost start-instruction callback cannot leave meeting pending forever',()=>{
+ const {s,e}=fixture();s.step(10);s.step(5.1);
+ assert.equal(e.status,'failed','meeting must time out even when the browser loses the speech completion event');
+ assert.ok(s.faults.some(f=>f.key===`${e.id}-time`));
+});
 test('overtaking preserves all 150 metres until its start instruction has finished',()=>{
  const s=new Simulation(getRoute(9),'practice',{waitForSpeech:true}),e=s.events.find(e=>e.kind==='overtake');s.events=[e];
  s.progress=e.s;s.position=at(s.route,e.s);s.heading=s.position.heading;s.distance=100;s.step(.05);
@@ -27,4 +32,11 @@ test('overtaking preserves all 150 metres until its start instruction has finish
  s.distance+=149.9;s.step(.05);assert.equal(e.status,'pending');
  s.promptFinished(`${e.id}-start`);assert.equal(e.travelStart,origin,'duplicate callbacks must not extend 150m');
  s.distance+=.2;s.step(.05);assert.equal(e.status,'failed');assert.ok(s.faults.some(f=>f.key===`${e.id}-distance`));
+});
+test('a lost start-instruction callback cannot leave overtaking blocking later projects',()=>{
+ const s=new Simulation(getRoute(9),'practice',{waitForSpeech:true}),e=s.events.find(e=>e.kind==='overtake'),next=s.events.find(x=>x.s>e.s);
+ s.events=[e,next];s.progress=e.s;s.position=at(s.route,e.s);s.heading=s.position.heading;s.distance=100;s.step(.05);
+ s.step(10);s.distance+=150.1;s.step(.05);
+ assert.equal(e.status,'failed','overtaking must finish even when the browser loses the speech completion event');
+ assert.equal(s.next,next,'later project announcements must be able to advance');
 });

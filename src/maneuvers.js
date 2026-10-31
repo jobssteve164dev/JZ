@@ -1,13 +1,15 @@
 import {at} from './routes.js';
 import {laneNumber,lateralPosition,withinLane} from './lanes.js';
 export const MEETING_SECONDS=5;
+const START_PROMPT_TIMEOUT=10;
 
 export function prompt(sim,event,phase,text){
  if(phase==='start')event.startPrompt={id:`${event.id}-${phase}`,text};
  sim.prompts.push({id:`${event.id}-${phase}`,text});
 }
 export function updateOvertake(sim,e){
- if(!e.overtakeEntered){e.overtakeEntered=true;if(!sim.waitForSpeech)e.travelStart=sim.distance;prompt(sim,e,'start','开始超车，请在 150 米内完成超越并返回原车道。');}
+ if(!e.overtakeEntered){e.overtakeEntered=true;e.startPromptQueuedAt=sim.time;if(!sim.waitForSpeech)e.travelStart=sim.distance;prompt(sim,e,'start','开始超车，请在 150 米内完成超越并返回原车道。');}
+ if(e.travelStart===undefined&&sim.time-e.startPromptQueuedAt>=START_PROMPT_TIMEOUT-1e-8)e.travelStart=sim.distance;
  const lane=laneNumber(sim.route,sim.position,e.laneChange);
  if(lane===e.laneChange.to)e.reachedPassingLane=true;
  if(e.reachedPassingLane&&!e.returnPrompted&&sim.progress>=e.returnS){
@@ -35,7 +37,8 @@ export function meetingOffset(sim){
  return e&&!e.returnPrompted?.6:0;
 }
 export function updateMeeting(sim,e){
- if(!e.meetingEntered){e.meetingEntered=true;if(e.lateralStage)e.meetingLateral=e.approachLateral??lateralPosition(sim.route,sim.position,e.lateralStage);if(!sim.waitForSpeech)e.meetingStart=sim.time;prompt(sim,e,'start','开始会车。');}
+ if(!e.meetingEntered){e.meetingEntered=true;e.startPromptQueuedAt=sim.time;if(e.lateralStage)e.meetingLateral=e.approachLateral??lateralPosition(sim.route,sim.position,e.lateralStage);if(!sim.waitForSpeech)e.meetingStart=sim.time;prompt(sim,e,'start','开始会车。');}
+ if(e.meetingStart===undefined&&sim.time-e.startPromptQueuedAt>=START_PROMPT_TIMEOUT-1e-8)e.meetingStart=sim.time;
  const offset=e.lateralStage?lateralPosition(sim.route,sim.position,e.lateralStage)-e.meetingLateral:sim.offset;
  if(sim.braked>=e.preparationTime&&sim.looks.left>=e.preparationTime&&sim.looks.right>=e.preparationTime&&sim.speed*3.6<30&&offset>=.35&&offset<=1)e.meetingReady=true;
  if(!e.returnPrompted&&sim.progress>e.endS){e.returnPrompted=true;prompt(sim,e,'return','会车结束，回正。');}
