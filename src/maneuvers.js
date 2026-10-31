@@ -2,6 +2,7 @@ import {at} from './routes.js';
 import {laneNumber,lateralPosition,withinLane} from './lanes.js';
 export const MEETING_SECONDS=5;
 const START_PROMPT_TIMEOUT=10;
+const MEETING_EXIT_GRACE=40;
 
 export function prompt(sim,event,phase,text){
  if(phase==='start')event.startPrompt={id:`${event.id}-${phase}`,text};
@@ -38,11 +39,13 @@ export function meetingOffset(sim){
 }
 export function updateMeeting(sim,e){
  if(!e.meetingEntered){e.meetingEntered=true;e.startPromptQueuedAt=sim.time;if(e.lateralStage)e.meetingLateral=e.approachLateral??lateralPosition(sim.route,sim.position,e.lateralStage);if(!sim.waitForSpeech)e.meetingStart=sim.time;prompt(sim,e,'start','开始会车。');}
- if(e.meetingStart===undefined&&sim.time-e.startPromptQueuedAt>=START_PROMPT_TIMEOUT-1e-8)e.meetingStart=sim.time;
+ if(e.meetingStart===undefined&&sim.time-e.startPromptQueuedAt>=START_PROMPT_TIMEOUT-1e-8){e.meetingStart=sim.time;e.meetingStartFallback=true;}
  const offset=e.lateralStage?lateralPosition(sim.route,sim.position,e.lateralStage)-e.meetingLateral:sim.offset;
  if(sim.braked>=e.preparationTime&&sim.looks.left>=e.preparationTime&&sim.looks.right>=e.preparationTime&&sim.speed*3.6<30&&offset>=.35&&offset<=1)e.meetingReady=true;
  if(!e.returnPrompted&&sim.progress>e.endS){e.returnPrompted=true;prompt(sim,e,'return','会车结束，回正。');}
- if(e.meetingStart!==undefined&&sim.time-e.meetingStart>MEETING_SECONDS+1e-8){sim.fail(`${e.id}-time`,'会车：未在 5 秒内完成减速、观察、靠右及回正');sim.evaluate(e);prompt(sim,e,'end','会车项目结束，操作超时，请保持安全行驶。');}
+ const timedOut=e.meetingStart!==undefined&&sim.time-e.meetingStart>MEETING_SECONDS+1e-8;
+ if(sim.progress>e.endS+MEETING_EXIT_GRACE&&(e.meetingStart===undefined||e.meetingStartFallback||e.peakSpeed>=30||timedOut)){if(!e.meetingReady)sim.fail(`${e.id}-actions`,'会车：未完成制动、左右观察及车道内靠右');sim.fail(`${e.id}-exit`,'会车：驶离项目区域前未完成回正');sim.evaluate(e);prompt(sim,e,'end','会车项目结束，请保持车道。');}
+ else if(timedOut){sim.fail(`${e.id}-time`,'会车：未在 5 秒内完成减速、观察、靠右及回正');sim.evaluate(e);prompt(sim,e,'end','会车项目结束，操作超时，请保持安全行驶。');}
  else if(e.returnPrompted&&Math.abs(offset)<.22&&Math.abs(Math.atan2(Math.sin(sim.heading-at(sim.route,sim.progress).heading),Math.cos(sim.heading-at(sim.route,sim.progress).heading)))<.08){
   if(!e.meetingReady)sim.fail(`${e.id}-actions`,'会车：未完成制动、左右观察及车道内靠右');
   sim.evaluate(e);prompt(sim,e,'end',e.status==='passed'?'会车完成，请保持车道。':'会车项目结束，请保持车道。');

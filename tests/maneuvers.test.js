@@ -50,14 +50,15 @@ for(const id of [1,9,10])test(`route ${id} overtaking fails after entering any l
  s.evaluate(e);
  assert.equal(e.status,'failed');assert.ok(s.faults.some(f=>f.key===`${e.id}-lane`));
 });
-test('route 1 does not announce or start overtaking while meeting is still timed',()=>{
- const s=new Simulation(getRoute(1),'exam'),meeting=s.events.find(e=>e.kind==='meet'),overtake=s.events.find(e=>e.kind==='overtake');
+test('route 1 releases an unfinished meeting before it can hide the overtaking car and instruction',()=>{
+ const s=new Simulation(getRoute(1),'exam',{waitForSpeech:true}),meeting=s.events.find(e=>e.kind==='meet'),overtake=s.events.find(e=>e.kind==='overtake');
  s.events=[meeting,overtake];place(s,meeting.s-34);s.step(.05);place(s,meeting.s);s.step(.05);
  assert.equal(meeting.meetingEntered,true);
- s.prompts=[];place(s,overtake.s);s.step(.05);
- assert.equal(overtake.prewarned,undefined);assert.equal(overtake.overtakeEntered,undefined);assert.equal(s.prompts.some(p=>p.id.startsWith(overtake.id)),false);
- meeting.status='passed';s.step(.05);
- assert.equal(overtake.prewarned,true);assert.equal(overtake.overtakeEntered,true);
+ s.step(10.1);
+ s.prompts=[];place(s,overtake.s-80);s.position.x+=1;s.step(.05);
+ assert.equal(meeting.status,'failed','the ten-second fallback must still release the next project when the speech callback is lost');
+ assert.equal(overtake.prewarned,true);assert.equal(s.traffic.find(v=>v.id===overtake.id).active,true);
+ assert.ok(s.prompts.some(p=>p.id===`${overtake.id}-prepare`&&p.text.startsWith('前方超车')));
 });
 test('route 10 starts with an adjacent lane change as four lanes narrow to three',()=>{
  const r=getRoute(10),e=r.events.find(e=>e.kind==='change'),finish=at(r,e.endS-8);

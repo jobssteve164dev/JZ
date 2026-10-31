@@ -9,9 +9,10 @@ for(const id of [1,9,10])test(`follow learning drives route ${id}, teaches every
  const driver=new m.LearningDriver(s,text=>spoken.push(text));
  s.paused=true;driver.step(2);assert.equal(s.time,0);assert.equal(spoken.length,0);s.paused=false;
  const checkpoint=id===1?s.events.find(e=>e.kind==='straight'):id===9?s.events.filter(e=>e.kind==='cross')[1]:s.events.find(e=>e.kind==='straight');
- let laneObserved=false;
+ const changes=s.events.filter(e=>e.kind==='change'),changeCaptionsSeen=new Set();let laneObserved=false;
  for(let i=0;i<40000&&!s.finished;i++){
   driver.step(.05);
+  for(const e of changes)if(driver.spoken.has(e.id)&&driver.caption===`${e.label}。${e.hint}`)changeCaptionsSeen.add(e.id);
   if(!laneObserved&&s.progress>checkpoint.s+5){
    const lateral=(id===10?-s.position.z:id===9?-s.position.x:s.position.x)/s.route.scale;
    assert.ok(id===10?lateral>11&&lateral<15.25:lateral>3&&lateral<7,`source-image lane mismatch: ${lateral}`);laneObserved=true;
@@ -20,6 +21,7 @@ for(const id of [1,9,10])test(`follow learning drives route ${id}, teaches every
  assert.equal(laneObserved,true);
  assert.equal(s.finished,true,JSON.stringify({progress:s.progress,faults:s.faults}));
  assert.ok(s.progress>2997);assert.equal(s.score,100,JSON.stringify(s.faults));
- for(const e of s.events.filter(e=>!['meet','overtake'].includes(e.kind)))assert.ok(spoken.some(t=>t.includes(e.label)&&t.includes(e.hint)),`missing instruction ${e.label}`);
+ for(const e of s.events.filter(e=>!['meet','overtake','change'].includes(e.kind)))assert.ok(spoken.some(t=>t.includes(e.label)&&t.includes(e.hint)),`missing instruction ${e.label}`);
+ assert.equal(changeCaptionsSeen.size,changes.length,'every lane-change guidance must remain visible');assert.equal(spoken.some(t=>t.includes('变更车道')),false,'autonomous lane changes must not be announced');
  for(const phase of ['开始会车','会车结束','会车完成','前方超车','开始超车','请返回原车道','超车完成'])assert.ok(spoken.some(t=>t.startsWith(phase)),`missing phase ${phase}`);assert.ok(spoken.some(t=>t.includes('超车完成')));assert.equal(s.gear,'P');assert.equal(s.handbrake,true);
 });

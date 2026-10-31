@@ -10,6 +10,7 @@ import {LightingExam,questions,lightNames} from './lights.js';
 import {mountLightStalk} from './light-stalk.js';
 import {LearningDriver} from './learning.js';
 import {EngineSound} from './engine-sound.js';
+import {approachSpeech} from './project-voice.js';
 const engineSound=new EngineSound();
 const images={1:new URL('../input/mmexport1790494901618.jpg',import.meta.url).href,9:new URL('../input/mmexport1790494903835.jpg',import.meta.url).href,10:new URL('../input/mmexport1790494905745.jpg',import.meta.url).href,lights:new URL('../input/mmexport1790495905014.jpg',import.meta.url).href};
 const $=s=>document.querySelector(s);
@@ -54,7 +55,7 @@ function closeModal(){
  $('#modal').classList.add('hidden');if(screen==='drive'){
   sim.paused=false;lastTime=performance.now();const session=sim,e=sim.events.find(e=>e.status==='pending'&&e.startPrompt&&(e.kind==='meet'?e.meetingStart===undefined:e.travelStart===undefined));
   if(e)speak(e.startPrompt.text,()=>session.promptFinished(e.startPrompt.id,spokenAt(session)));
-  else if(mode==='learn'&&learner?.caption)speak(learner.caption);
+  else if(mode==='learn'&&learner?.caption&&learner.captionVoice)speak(learner.caption);
  }
 }
 function projectDetails(){
@@ -64,7 +65,7 @@ function projectDetails(){
 }
 function help(){
  if(screen==='drive'){sim.paused=true;resetControls();stopVoice();}
- dialog('怎么练',`<div class="help-grid"><p><b>油门 / 刹车</b><br>↑ 或 W 加速；↓、S 或空格制动。触屏长按踏板。</p><p><b>方向盘</b><br>← → 或 A / D 转向；触屏用左拇指转动左侧方向盘，右手同时控制踏板；松开回正。</p><p><b>观察与打灯</b><br>Q / E 左右转向灯；Z / C 观察左右后方。转向前打灯满 3 秒。</p><p><b>起步与停车</b><br>起步：安全带、D 挡、松驻车制动。终点：制动停稳、拉驻车制动、P 挡、结束考试。</p></div><p>跟随学习会自动驾驶并讲解全部考点；带提示练习由你自己驾驶；考试模式隐藏引导与学校、公交站预告。模拟扣分后仍可开完全程，再复盘错误。</p><p>三条路线依据考点图还原方向与项目，每条 3 公里。分段距离、道路外观与红绿灯周期为模拟设置，不能代替实车训练或考场当天要求。</p><button id="toggle-voice">${voice?'关闭':'开启'}语音</button><button id="rules-link">考试依据</button>`);
+ dialog('怎么练',`<div class="help-grid"><p><b>油门 / 刹车</b><br>↑ 或 W 加速；↓、S 或空格制动。触屏长按踏板。</p><p><b>方向盘</b><br>← → 或 A / D 转向；触屏用左拇指转动左侧方向盘，右手同时控制踏板；松开回正。</p><p><b>观察与打灯</b><br>Q / E 左右转向灯；Z / C 观察左右后方。转向前打灯满 3 秒。</p><p><b>起步与停车</b><br>起步：安全带、D 挡、松驻车制动。终点：制动停稳、拉驻车制动、P 挡、结束考试。</p></div><p>跟随学习会自动驾驶并讲解考点，自主变道只显示屏幕提示；带提示练习由你自己驾驶；考试模式隐藏引导与学校、公交站预告。模拟扣分后仍可开完全程，再复盘错误。</p><p>三条路线依据考点图还原方向与项目，每条 3 公里。分段距离、道路外观与红绿灯周期为模拟设置，不能代替实车训练或考场当天要求。</p><button id="toggle-voice">${voice?'关闭':'开启'}语音</button><button id="rules-link">考试依据</button>`);
  $('#toggle-voice').onclick=()=>{voice=!voice;stopVoice();help();};$('#rules-link').onclick=rules;
 }
 function rules(){dialog('资料与练习范围',`<p>路线以提供的一号、九号、十号线图片为准。灯光题目取自新增的“苏州观山科目三考场”图，不代表吴江官方题库。</p><p>模拟按 100 分计分，90 分合格；未打灯满 3 秒、闯红灯、未观察等记为不合格事项。道路尺寸、方向容差和感应范围为训练参数。</p><p><a href="https://btgaj.xjbt.gov.cn/c/2025-01-06/8378604.shtml" target="_blank" rel="noreferrer">公安部：机动车驾驶证申领和使用规定</a></p><p><a href="https://gaj.cq.gov.cn/zwgk/zcjd/201912/t20191227_3566720.html" target="_blank" rel="noreferrer">重庆公安：考试标准变化解读</a></p><p><a href="https://www.wuhan.gov.cn/zwgk/xxgk/zcjd/mtzj/202109/t20210923_1782799.shtml" target="_blank" rel="noreferrer">武汉政府：转向灯及停车要求</a></p><p><a href="https://ga.chengde.gov.cn/art/2024/4/12/art_3027_996587.html" target="_blank" rel="noreferrer">承德公安：学校等项目观察路牌</a></p><p><a href="https://www.wuxi.gov.cn/ztzl/jszbl/index.shtml" target="_blank" rel="noreferrer">无锡政府：学校、公交站减速要求</a></p>`);}
@@ -165,7 +166,7 @@ function renderUI(){
  $('#hint').textContent=mode==='learn'?learner.caption:sim.parkingReady?`距右边线约 ${Math.max(-99,Math.round(sim.curbGap*100))} cm。停稳后拉驻车制动、挂 P 挡。`:mode==='practice'?e.hint:'留意道路标志，按口令完成考试。';
  $('#curb-distance').classList.toggle('hidden',!sim.parkingReady);$('#curb-distance').textContent=`距右边线 ${Math.max(-99,Math.round(sim.curbGap*100))} cm`;
  $('#finish').classList.toggle('hidden',!sim.parkingReady);
- if(mode!=='learn'&&approaching&&lastAnnounced!==e.id&&!e.silent){lastAnnounced=e.id;if(!['start','meet','overtake'].includes(e.kind))speak(`前方${e.label}`,null,true);}
+ if(mode!=='learn'&&approaching&&lastAnnounced!==e.id){lastAnnounced=e.id;const text=approachSpeech(e);if(text)speak(text,null,true);}
  if(sim.message!==noticeText&&sim.faults.some(f=>f.text===sim.message))showNotice(sim.message);
  if(performance.now()>noticeUntil)$('#notice').classList.add('hidden');
  map($('#mini-map'),sim.route,sim);

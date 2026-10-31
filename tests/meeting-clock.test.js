@@ -19,10 +19,26 @@ test('meeting acknowledgements cannot extend the timer and pauses do not spend i
 test('without speech the same meeting timer starts immediately',()=>{
  const {s,e}=fixture(false);s.step(4.9);assert.equal(e.status,'pending');s.step(.2);assert.equal(e.status,'failed');
 });
+test('leaving the meeting area cannot shorten the full five-second window at legal speed',()=>{
+ const {s,e}=fixture(false);s.step(4.9);s.progress=e.endS+35;s.position=at(s.route,s.progress);s.position.z+=.6;s.heading=at(s.route,s.progress).heading;s.step(.05);
+ assert.equal(e.status,'pending');s.step(.1);assert.equal(e.status,'failed');assert.ok(s.faults.some(f=>f.key===`${e.id}-time`));
+});
+test('a delayed start instruction still leaves five full seconds before the spatial release',()=>{
+ const {s,e}=fixture();s.step(1);s.promptFinished(`${e.id}-start`);const started=e.meetingStart;e.meetingReady=true;
+ s.step(4.7);s.progress=e.endS+41;s.position=at(s.route,s.progress);s.position.z+=.6;s.heading=at(s.route,s.progress).heading;s.speed=29.9/3.6;s.step(.05);
+ assert.equal(e.status,'pending');assert.ok(s.time-started<5);
+ s.step(.3);assert.equal(e.status,'failed');assert.ok(s.time-started>5);
+});
 test('a lost start-instruction callback cannot leave meeting pending forever',()=>{
  const {s,e}=fixture();s.step(10);s.step(5.1);
  assert.equal(e.status,'failed','meeting must time out even when the browser loses the speech completion event');
  assert.ok(s.faults.some(f=>f.key===`${e.id}-time`));
+});
+test('a lost callback still releases the meeting after the ten-second fallback starts',()=>{
+ const {s,e}=fixture();s.step(10.1);
+ assert.equal(e.status,'pending');
+ s.progress=e.endS+41;s.position=at(s.route,s.progress);s.position.z+=.6;s.heading=at(s.route,s.progress).heading;s.step(.05);
+ assert.equal(e.status,'failed','fallback timing must not disguise the lost callback and block the next project');
 });
 test('overtaking preserves all 150 metres until its start instruction has finished',()=>{
  const s=new Simulation(getRoute(9),'practice',{waitForSpeech:true}),e=s.events.find(e=>e.kind==='overtake');s.events=[e];
