@@ -64,6 +64,15 @@ test('route 10 start taper removes the outside lane shown in the reference image
  assert.deepEqual(full.edges,[3,7,11,15,19.25]);
  assert.deepEqual(taper.edges,[3,7,11,15.125,17.25]);
 });
+test('route 10 outbound four-to-three tapers all remove the outside lane shown in the reference image',()=>{
+ const tapers=[[0,'E',-450],[1,'N',-70],[0,'W',-100]];
+ for(const [road,direction,along]of tapers){
+  const section=layout.roadSection(10,road,direction,along);
+  assert.equal(section.count,4);
+  assert.equal(section.blend,.5);
+  assert.deepEqual(section.edges,[3,7,11,15.125,17.25],`${direction}bound taper mirrored the lane drop`);
+ }
+});
 test('route 10 vehicle starts inside an established four-lane section',()=>{
  const r=getRoute(10),start=r.path[0],along=start.x/r.scale,lateral=start.z/r.scale;
  assert.deepEqual(layout.roadSection(10,0,'E',-600).edges,[3,7,11,15,19.25]);
