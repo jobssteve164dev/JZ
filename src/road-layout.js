@@ -109,8 +109,30 @@ export function remapRoadPoint(spec,id,point,axis=null){
 }
 export function junctionBounds(route,x,z){
  let left=17,right=17,top=17,bottom=17;
+ let vertical,horizontal;
  route.roads.forEach((r,i)=>{
-  if(r[0]===r[2]&&Math.abs(r[0]-x)<.01){left=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'S',z/route.scale+d).roadEdges.at(-1)))+2;right=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'N',z/route.scale+d).roadEdges.at(-1)))+2;}
-  if(r[1]===r[3]&&Math.abs(r[1]-z)<.01){top=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'W',x/route.scale+d).roadEdges.at(-1)))+2;bottom=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'E',x/route.scale+d).roadEdges.at(-1)))+2;}
- });return {left:left*route.scale,right:right*route.scale,top:top*route.scale,bottom:bottom*route.scale};
+  if(r[0]===r[2]&&Math.abs(r[0]-x)<.01){vertical=r;left=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'S',z/route.scale+d).roadEdges.at(-1)));right=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'N',z/route.scale+d).roadEdges.at(-1)));}
+  if(r[1]===r[3]&&Math.abs(r[1]-z)<.01){horizontal=r;top=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'W',x/route.scale+d).roadEdges.at(-1)));bottom=Math.max(...[-30,30].map(d=>roadSection(route.id,i,'E',x/route.scale+d).roadEdges.at(-1)));}
+ });
+ const k=route.scale;
+ return {left:(left+(horizontal?.[0]===x?0:2))*k,right:(right+(horizontal?.[2]===x?0:2))*k,
+  top:(top+(vertical?.[1]===z?0:2))*k,bottom:(bottom+(vertical?.[3]===z?0:2))*k};
+}
+
+export function junctionCorners(route){
+ const k=route.scale;
+ return route.junctions.flatMap(([x,z],index)=>{
+  const vertical=route.roads.findIndex(r=>r[0]===r[2]&&r[0]===x);
+  const horizontal=route.roads.findIndex(r=>r[1]===r[3]&&r[1]===z);
+  const xSides=[-1,1].filter(sx=>(route.roads[horizontal][sx<0?0:2]-x)*sx>0);
+  const zSides=[-1,1].filter(sz=>(route.roads[vertical][sz<0?1:3]-z)*sz>0);
+  return xSides.flatMap(sx=>zSides.map(sz=>{
+   const dx=roadSection(route.id,vertical,sx>0?'N':'S',z/k).roadEdges.at(-1)*k;
+   const dz=roadSection(route.id,horizontal,sz>0?'E':'W',x/k).roadEdges.at(-1)*k;
+   // The main north corners on routes 9 and 10 have the wider sweep shown in the drawings.
+   const wide=route.id!==1&&z===0&&sz<0;
+   const routeOneTurn=route.id===1&&((index===0&&sx>0&&sz>0)||(index===4&&sx>0&&sz<0)||(index===5&&sx<0&&sz<0));
+   return {x:x+sx*dx,z:z+sz*dz,sx,sz,radius:(wide?20:routeOneTurn?14:8)*k,vertical,horizontal,junction:index};
+  }));
+ });
 }

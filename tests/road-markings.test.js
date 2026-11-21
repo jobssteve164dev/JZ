@@ -1,7 +1,35 @@
 import test from 'node:test';import assert from 'node:assert/strict';import * as THREE from 'three';
-import {getRoute} from '../src/routes.js';
+import {at,getRoute} from '../src/routes.js';
+import {inJunction} from '../src/lanes.js';
 import {roadSection} from '../src/road-layout.js';
 const m=await import('../src/road-markings.js').catch(()=>({}));
+
+for(const [id,x,z] of [[1,-380,0],[9,0,0],[10,0,0]])test(`route ${id}: rendered inside corners join the two road edges with a curve`,()=>{
+ const r=getRoute(id),g=m.buildRoadSurface(r),k=r.scale;g.updateMatrixWorld(true);
+ const surface=g.getObjectByName('road-surface');
+ const paved=(x,z)=>new THREE.Raycaster(new THREE.Vector3(x*k,10,z*k),new THREE.Vector3(0,-1,0)).intersectObject(surface).length>0;
+ const [dx,dz]=id===1?[17.7,10.7]:[-18.5,-18.5];
+ assert.ok(paved(x+dx,z+dz),'inside the bend should be paved');
+ assert.ok(!paved(x+Math.sign(dx)*23,z+Math.sign(dz)*23),'past the curved edge should still be off the road');
+ if(id===1){
+  for(const offset of [-13,0,16]){
+   assert.ok(paved(x+offset,z-8),'the T-junction has a continuous east-west approach');
+   assert.ok(!paved(x+offset,z-10),'the T-junction has no road extending north');
+   assert.ok(!inJunction(r,{x:(x+offset)*k,z:(z-10)*k}),'grass north of the T-junction is outside its assessment area');
+  }
+ }
+ for(const e of r.events.filter(e=>['left','right','uturn'].includes(e.kind))){
+  const end=e.kind==='uturn'?e.s+60*k:e.endS+25*k;
+  for(let s=e.s;s<=end;s+=2){
+   const {x,z,heading}=at(r,s);
+   const sin=Math.sin(heading),cos=Math.cos(heading);
+   for(const lateral of [-.9,.9])for(const longitudinal of [-2.15,2.15]){
+    const px=x+lateral*cos+longitudinal*sin,pz=z+lateral*sin-longitudinal*cos;
+    assert.ok(paved(px/k,pz/k),`${e.id} guides part of the car off the paved road`);
+   }
+  }
+ }
+});
 test('actual road meshes contain direction arrows and redistributed four-lane approach markings',()=>{
  assert.equal(typeof m.buildRoadSurface,'function','no road arrow geometry is rendered');
  const r=getRoute(1),g=m.buildRoadSurface(r);g.updateMatrixWorld(true);

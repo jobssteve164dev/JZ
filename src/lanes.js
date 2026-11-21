@@ -43,23 +43,31 @@ export function withinLane(route,position,stage,lane){
  const d=lateralPosition(route,position,stage),edges=sectionForPosition(route,position,stage).edges;
  return lane>0&&lane<edges.length&&d-.9>=edges[lane-1]*route.scale-.08&&d+.9<=edges[lane]*route.scale+.08;
 }
-export function inJunction(route,p){return (route.junctionAreas??=route.junctions.map(([x,z])=>({x,z,...junctionBounds(route,x,z)}))).some(b=>p.x>b.x-b.left&&p.x<b.x+b.right&&p.z>b.z-b.top&&p.z<b.z+b.bottom);}
+export function inJunction(route,p){
+ if((route.junctionAreas??=route.junctions.map(([x,z])=>({x,z,...junctionBounds(route,x,z)}))).some(b=>p.x>b.x-b.left&&p.x<b.x+b.right&&p.z>b.z-b.top&&p.z<b.z+b.bottom))return true;
+ return route.corners.some(({x,z,sx,sz,radius})=>{
+  const dx=(p.x-x)*sx,dz=(p.z-z)*sz,edgeLane=4*route.scale;
+  if(dx< -edgeLane||dz< -edgeLane||dx>=radius||dz>=radius)return false;
+  return dx<=0||dz<=0||(radius-dx)**2+(radius-dz)**2>=radius**2;
+ });
+}
 export function junctionRange(route,s){
- inJunction(route,route.path[0]);let range;
+ let range;
+ const boundary=(a,b,inside)=>{
+  let lo=0,hi=1;
+  for(let i=0;i<16;i++){
+   const t=(lo+hi)/2,point={x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t};
+   if(inJunction(route,point)===inside)lo=t;else hi=t;
+  }
+  return a.s+(b.s-a.s)*(lo+hi)/2;
+ };
  for(let i=1;i<route.path.length;i++){
   const a=route.path[i-1],b=route.path[i];if(b.s<s-40||a.s>s+120)continue;
-  for(const box of route.junctionAreas){
-   let from=0,to=1;
-   for(const [axis,min,max]of [['x',box.x-box.left,box.x+box.right],['z',box.z-box.top,box.z+box.bottom]]){
-    const delta=b[axis]-a[axis];
-    if(Math.abs(delta)<1e-9){if(a[axis]<min||a[axis]>max)to=-1;}
-    else{const t1=(min-a[axis])/delta,t2=(max-a[axis])/delta;from=Math.max(from,Math.min(t1,t2));to=Math.min(to,Math.max(t1,t2));}
-   }
-   if(from>to)continue;
-   const start=a.s+(b.s-a.s)*from,end=a.s+(b.s-a.s)*to;if(end<s)continue;
-   if(range&&start>range.end+.01)return range;
-   if(!range)range={start,end};else range.end=end;
-  }
+  const insideA=inJunction(route,a),insideB=inJunction(route,b);
+  if(!insideA&&!insideB){if(range)return range;continue;}
+  const start=insideA?a.s:boundary(a,b,false),end=insideB?b.s:boundary(a,b,true);
+  if(end<s)continue;
+  if(!range)range={start,end};else range.end=end;
  }return range;
 }
 export function medianAt(route,p){

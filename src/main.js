@@ -42,7 +42,14 @@ function map(canvas,route,state){
  const xy=p=>[ox+(p.x-minX)*scale,oz+(p.z-minZ)*scale];
  c.lineCap='round';c.strokeStyle='#466a65';c.lineWidth=10;
  for(const [x1,z1,x2,z2]of route.roads){c.beginPath();c.moveTo(...xy({x:x1,z:z1}));c.lineTo(...xy({x:x2,z:z2}));c.stroke();}
- c.strokeStyle=route.color;c.lineWidth=3;c.beginPath();route.path.forEach((p,i)=>i?c.lineTo(...xy(p)):c.moveTo(...xy(p)));c.stroke();
+ c.fillStyle=c.strokeStyle;
+ for(const {vertical,horizontal,sx,sz,radius} of route.corners){
+  const [x,y]=xy({x:route.roads[vertical][0],z:route.roads[horizontal][1]});
+  const r=Math.max(2,radius*scale);
+  c.save();c.translate(x+sx*5,y+sz*5);c.scale(sx,sz);
+  c.beginPath();c.moveTo(0,0);c.lineTo(0,r);c.arcTo(0,0,r,0,r);c.closePath();c.fill();c.restore();
+ }
+ c.strokeStyle=route.color;c.lineWidth=3;c.lineJoin='round';c.beginPath();route.path.forEach((p,i)=>i?c.lineTo(...xy(p)):c.moveTo(...xy(p)));c.stroke();
  for(const [i,p]of [route.path[0],route.path.at(-1)].entries()){const[x,y]=xy(p);c.fillStyle=i?'#f4ce80':'#b5f1d4';c.beginPath();c.arc(x,y,5,0,Math.PI*2);c.fill();}
  if(state){const[x,y]=xy(state.position);c.save();c.translate(x,y);c.rotate(state.heading);c.fillStyle='#fff';c.beginPath();c.moveTo(0,-9);c.lineTo(-5,6);c.lineTo(5,6);c.closePath();c.fill();c.restore();}
 }

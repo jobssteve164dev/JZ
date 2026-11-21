@@ -5,17 +5,34 @@ import {inJunction} from './lanes.js';
 const heading={N:0,E:Math.PI/2,S:Math.PI,W:-Math.PI/2};
 export function buildRoadSurface(route){
  const group=new THREE.Group(),k=route.scale,buffers={surface:[],shoulder:[],white:[],yellow:[],median:[]};
+ const corners=route.corners;
  const quad=(kind,a,b,c,d,y)=>{for(const p of [a,b,c,a,c,d])buffers[kind].push(p.x,y,p.z);};
  const point=(r,t,d)=>r[0]===r[2]?{x:r[0]+d*k,z:t*k}:{x:t*k,z:r[1]+d*k};
  const stripe=(kind,r,a,b,da,db,width,y=.1)=>quad(kind,point(r,a,da-width/2),point(r,b,db-width/2),point(r,b,db+width/2),point(r,a,da+width/2),y);
  route.roads.forEach((r,road)=>{
   const vertical=r[0]===r[2],from=(vertical?r[1]:r[0])/k,to=(vertical?r[3]:r[2])/k,pos=vertical?'N':'E',neg=vertical?'S':'W';
+  const gaps=d=>route.junctions.flatMap((_,i)=>{
+   const side=corners.filter(c=>c.junction===i&&(vertical?c.vertical===road&&c.sx===d:c.horizontal===road&&c.sz===d));
+   if(!side.length)return [];
+   const tangent=sign=>{
+    const c=side.find(c=>(vertical?c.sz:c.sx)===sign);
+    return c?(vertical?c.z:c.x)/k+sign*c.radius/k:sign<0?from:to;
+   };
+   return [tangent(-1),tangent(1)];
+  }).sort((a,b)=>a-b);
+  const edgeRuns=[1,-1].map(d=>[from,...gaps(d),to]);
   for(let a=from;a<to;a+=4){
    const b=Math.min(to,a+4),mid=(a+b)/2,p0=roadSection(route.id,road,pos,a),p1=roadSection(route.id,road,pos,b),n0=roadSection(route.id,road,neg,a),n1=roadSection(route.id,road,neg,b);
    for(const [kind,extra,y]of [['shoulder',1.5,-.08],['surface',0,.05]])quad(kind,point(r,a,-n0.roadEdges.at(-1)-extra),point(r,b,-n1.roadEdges.at(-1)-extra),point(r,b,p1.roadEdges.at(-1)+extra),point(r,a,p0.roadEdges.at(-1)+extra),y);
+   for(const [i,d,direction] of [[0,1,pos],[1,-1,neg]]){
+    const runs=edgeRuns[i];
+    for(let j=0;j<runs.length;j+=2){
+     const start=Math.max(a,runs[j]),end=Math.min(b,runs[j+1]);
+     if(start<end)stripe('white',r,start,end,d*roadSection(route.id,road,direction,start).roadEdges.at(-1),d*roadSection(route.id,road,direction,end).roadEdges.at(-1),.12);
+    }
+   }
    if(inJunction(route,point(r,mid,0)))continue;
    for(const [d,s0,s1]of [[1,p0,p1],[-1,n0,n1]]){
-    stripe('white',r,a,b,d*s0.roadEdges.at(-1),d*s1.roadEdges.at(-1),.12);
     const solid=roadArrows(route.id).some(row=>row.road===road&&row.direction===(d===1?pos:neg)&&Math.abs(row.along-mid)<24&&!s0.taper);
     if(solid||Math.floor((a-from)/4)%3===0){
      const count=Math.min(s0.edges.length,s1.edges.length);for(let i=1;i<count-1;i++)stripe('white',r,a,b,d*s0.edges[i],d*s1.edges[i],.12);
@@ -26,11 +43,22 @@ export function buildRoadSurface(route){
    else if(!route.medianGaps.some(g=>g.road===road&&mid*k>=g.from&&mid*k<=g.to))quad('median',point(r,a,-3),point(r,b,-3),point(r,b,3),point(r,a,3),.22);
   }
  });
+ for(const {x,z,sx,sz,radius} of corners){
+  const arc=(angle,offset=0)=>({x:x+sx*(radius-(radius-offset*k)*Math.cos(angle)),z:z+sz*(radius-(radius-offset*k)*Math.sin(angle))});
+  for(let i=0;i<16;i++){
+   const a=i*Math.PI/32,b=(i+1)*Math.PI/32;
+   for(const [kind,extra,y] of [['shoulder',1.5,-.08],['surface',0,.05]]){
+    const center={x:x+sx*extra*k,z:z+sz*extra*k};
+    for(const p of [center,arc(a,extra),arc(b,extra)])buffers[kind].push(p.x,y,p.z);
+   }
+   quad('white',arc(a,-.06),arc(b,-.06),arc(b,.06),arc(a,.06),.1);
+  }
+ }
  for(const [x,z]of route.junctions){
-  const b=junctionBounds(route,x,z);quad('surface',{x:x-b.left,z:z-b.top},{x:x-b.left,z:z+b.bottom},{x:x+b.right,z:z+b.bottom},{x:x+b.right,z:z-b.top},.06);
+  const b=junctionBounds(route,x,z);
   const vertical=route.roads.find(r=>r[0]===r[2]&&Math.abs(r[0]-x)<.01),horizontal=route.roads.find(r=>r[1]===r[3]&&Math.abs(r[1]-z)<.01);
-  if(vertical)for(const edge of [z-b.top-3*k,z+b.bottom+3*k])for(let v=x-b.left+1*k;v<x+b.right;v+=2.4*k)quad('white',{x:v,z:edge-1.8*k},{x:v,z:edge+1.8*k},{x:v+1.3*k,z:edge+1.8*k},{x:v+1.3*k,z:edge-1.8*k},.11);
-  if(horizontal)for(const edge of [x-b.left-3*k,x+b.right+3*k])for(let v=z-b.top+1*k;v<z+b.bottom;v+=2.4*k)quad('white',{x:edge-1.8*k,z:v},{x:edge-1.8*k,z:v+1.3*k},{x:edge+1.8*k,z:v+1.3*k},{x:edge+1.8*k,z:v},.11);
+  if(vertical)for(const edge of [z-b.top-3*k,z+b.bottom+3*k].filter(edge=>edge>vertical[1]&&edge<vertical[3]))for(let v=x-b.left+1*k;v<x+b.right;v+=2.4*k)quad('white',{x:v,z:edge-1.8*k},{x:v,z:edge+1.8*k},{x:v+1.3*k,z:edge+1.8*k},{x:v+1.3*k,z:edge-1.8*k},.11);
+  if(horizontal)for(const edge of [x-b.left-3*k,x+b.right+3*k].filter(edge=>edge>horizontal[0]&&edge<horizontal[2]))for(let v=z-b.top+1*k;v<z+b.bottom;v+=2.4*k)quad('white',{x:edge-1.8*k,z:v},{x:edge-1.8*k,z:v+1.3*k},{x:edge+1.8*k,z:v+1.3*k},{x:edge+1.8*k,z:v},.11);
  }
  for(const [kind,color]of [['shoulder','#bbc2bd'],['surface','#566269'],['white','#f3f0df'],['yellow','#f6c853'],['median','#7e9d59']]){
   const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(buffers[kind],3));geometry.computeVertexNormals();

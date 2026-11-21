@@ -1,12 +1,12 @@
 import {attachLaneRules,junctionRange} from './lanes.js';
-import {remapRoadPoint} from './road-layout.js';
+import {junctionCorners,remapRoadPoint} from './road-layout.js';
 export const labels={start:'起步',right:'路口右转',left:'路口左转',change:'变更车道',straight:'直线行驶',uturn:'掉头',meet:'会车',overtake:'超车',cross:'路口直行',school:'学校区域',bus:'公交车站',park:'靠边停车'};
 export const hints={start:'系好安全带，挂 D 挡，松驻车制动；打左灯满 3 秒，观察后平稳起步。',right:'提前打右灯，观察右后方；减速沿右转车道转弯，礼让被放行的车辆和行人。',left:'提前打左灯，观察左后方；遵守信号，减速左转。',change:'先观察、打灯满 3 秒，再平稳转向进入相邻车道，完成后关灯。',straight:'目视远处，保持车道；方向轻微修正，避免急打方向。',uturn:'打左灯满 3 秒，观察左后方；减速到 10 km/h 左右完成掉头。',meet:'观察对向来车，减速靠右，保持安全间距。',overtake:'观察左后方，左灯满 3 秒后超车；驶过后观察右后方，右灯满 3 秒再返回。',cross:'提前减速并左右观察，停车线前看信号，礼让行人。',school:'留意学校标志，提前点刹，速度低于 30 km/h，左右观察。',bus:'留意公交站牌，提前点刹，速度低于 30 km/h，注意上下车行人。',park:'右灯满 3 秒，观察右后方；车身距右边线 30 cm 内停稳，拉驻车制动，挂 P 挡。'};
 const p=(x,z)=>({x,z});
 // Road geometry preserves the supplied diagrams' topology; dimensions are schematic.
 const specs={
   1:{name:'一号线',color:'#4f7cff',image:'mmexport1790494901618.jpg',subtitle:'环绕车管所 · 三次右转',
-    points:[[-367,180],[-367,25],[-367,13],[-345,13],[-250,13],[-205,5],[-20,5],[3,3],[5,-25],[5,-280],[3,-294],[-2,-300],[-7,-294],[-9,-280],[-9,-170],[-9,-140],[-7,-120],[-7,-105],[-9,-85],[-9,500],[-13,540],[-13,610],[-13,647],[-28,647],[-340,647],[-367,647],[-367,630],[-367,505]],
+    points:[[-367,180],[-367,25],[-367,13],[-345,13],[-250,13],[-205,5],[-20,5],[3,3],[5,-12],[5,-280],[3,-294],[-2,-300],[-7,-294],[-9,-280],[-9,-170],[-9,-140],[-7,-120],[-7,-105],[-9,-85],[-9,500],[-13,540],[-13,610],[-13,638],[-28,647],[-340,647],[-350.5,647],[-367,637.5],[-367,505]],
     roads:[[-380,0,-380,740],[0,-360,0,740],[-460,0,160,0],[-460,330,160,330],[-460,660,160,660]],
     junctions:[[-380,0],[0,0],[-380,330],[0,330],[-380,660],[0,660]],
     markers:[['start',-367,180],['right',-367,35],['change',-250,13,'left'],['left',-40,5],['straight',5,-140],['uturn',5,-265],['meet',-9,-255],['overtake',-9,-145],['cross',-9,-35],['school',-9,160],['cross',-9,295],['change',-9,500,'right'],['right',-13,610],['bus',-140,647],['right',-340,647],['park',-367,505]],
@@ -19,12 +19,59 @@ const specs={
     markers:[['start',650,-13],['straight',550,-13],['overtake',350,-13],['right',45,-13],['school',13,-110],['change',13,-150,'left'],['cross',9,-420],['change',9,-570,'left'],['bus',5,-850],['uturn',5,-955],['cross',-5,-480],['left',-5,-45],['meet',180,9],['park',450,13]],
     lights:[[-5,-28,11]],signs:[['school',13,-110],['bus',5,-850]]},
   10:{name:'十号线',color:'#f16f55',image:'mmexport1790494905745.jpg',subtitle:'西侧起步 · 回程直线行驶',
-    points:[[-550,13],[-510,13],[-485,11],[-400,13],[-270,13],[-230,9],[-20,5],[3,3],[5,-30],[5,-950],[3,-965],[-2,-972],[-7,-965],[-9,-950],[-9,-850],[-5,-830],[-5,-810],[-9,-790],[-9,-240],[-13,-200],[-13,-35],[-13,-13],[-40,-13],[-230,-13],[-265,-9],[-290,-9],[-325,-13],[-460,-13],[-490,-13],[-550,-13]],
+    points:[[-550,13],[-510,13],[-485,11],[-400,13],[-270,13],[-230,9],[-20,5],[3,3],[5,-18],[5,-950],[3,-965],[-2,-972],[-7,-965],[-9,-950],[-9,-850],[-5,-830],[-5,-810],[-9,-790],[-9,-240],[-13,-200],[-13,-35],[-13,-13],[-35,-13],[-230,-13],[-265,-9],[-290,-9],[-325,-13],[-460,-13],[-490,-13],[-550,-13]],
     roads:[[-650,0,220,0],[0,-1040,0,230],[-100,-430,100,-430]],
     junctions:[[0,0],[0,-430]],
     markers:[['start',-550,13],['change',-510,13,'left'],['meet',-400,13],['change',-270,13,'left'],['left',-45,5],['school',5,-120],['cross',5,-400],['bus',5,-820],['uturn',5,-935],['overtake',-9,-860],['cross',-9,-460],['change',-9,-240,'right'],['right',-13,-40],['change',-230,-13,'left'],['straight',-370,-13],['park',-550,-13]],
     lights:[[-28,5,4]],signs:[['school',5,-120],['bus',5,-820]]}
 };
+// Each span starts and ends on the approach and exit lanes, with an apex for U-turns.
+const turnSpans={
+  1:[[1,3],[6,8],[9,13,11],[22,23],[25,26]],
+  9:[[5,7],[12,16,14],[17,19]],
+  10:[[6,8],[9,13,11],[20,22]]
+};
+const quarterArc=4*(Math.sqrt(2)-1)/3;
+function tangent(a,b){
+  const dx=b.x-a.x,dz=b.z-a.z,length=Math.hypot(dx,dz);
+  return p(dx/length,dz/length);
+}
+function along(point,direction,distance){
+  return p(point.x+direction.x*distance,point.z+direction.z*distance);
+}
+function cubicPoints(a,b,c,d){
+  return Array.from({length:32},(_,i)=>{
+    const t=(i+1)/32,u=1-t;
+    return p(u**3*a.x+3*u*u*t*b.x+3*u*t*t*c.x+t**3*d.x,
+      u**3*a.z+3*u*u*t*b.z+3*u*t*t*c.z+t**3*d.z);
+  });
+}
+function roundTurns(id,points,keyIndices){
+  for(const [from,to,apexIndex] of [...turnSpans[id]].reverse()){
+    const first=keyIndices[from],last=keyIndices[to],a=points[first],d=points[last];
+    const entry=tangent(points[first-1],a),exit=tangent(d,points[last+1]);
+    let samples;
+    if(apexIndex!==undefined){
+      const apex=p((a.x+d.x)/2,points[keyIndices[apexIndex]].z);
+      const depth=a.z-apex.z,halfWidth=(a.x-d.x)/2;
+      samples=[
+        ...cubicPoints(a,along(a,entry,depth*.83),p(apex.x+halfWidth*.8,apex.z),apex),
+        ...cubicPoints(apex,p(apex.x-halfWidth*.8,apex.z),along(d,exit,-depth*.83),d)
+      ];
+    }else{
+      const dx=d.x-a.x,dz=d.z-a.z;
+      const approach=Math.abs(dx*entry.x+dz*entry.z)*quarterArc;
+      const left=entry.x*exit.z-entry.z*exit.x<0;
+      // Align with the receiving lane before reaching the end of the median opening.
+      const departure=Math.abs(dx*exit.x+dz*exit.z)*(left?.82:quarterArc);
+      samples=cubicPoints(a,along(a,entry,approach),along(d,exit,-departure),d);
+    }
+    const replaced=last-first;
+    points.splice(first+1,replaced,...samples);
+    for(let i=from+1;i<to;i++)keyIndices[i]=first+Math.round(samples.length*(i-from)/(to-from));
+    for(let i=to;i<keyIndices.length;i++)keyIndices[i]+=samples.length-replaced;
+  }
+}
 function length(points){return points.slice(1).reduce((sum,v,i)=>sum+Math.hypot(v.x-points[i].x,v.z-points[i].z),0);}
 export function nearest(route,position,min=0,max=route.length){
   let best={distance:Infinity,s:0,offset:0,index:0};
@@ -53,10 +100,12 @@ export function getRoute(id){
     keyIndices.push(points.length);const before=i?axis(spec.points[i-1],v):axis(v,spec.points[1]),after=i<spec.points.length-1?axis(v,spec.points[i+1]):before;
     points.push(remapRoadPoint(spec,id,p(...v),before===after?before:null));
   });
+  roundTurns(id,points,keyIndices);
   const scale=3000/length(points);
   const path=points.map(v=>p(v.x*scale,v.z*scale));let total=0;
   path.forEach((v,i)=>{if(i)total+=Math.hypot(v.x-path[i-1].x,v.z-path[i-1].z);v.s=total;});
   const r={...spec,id,scale,path,keyPath:keyIndices.map(i=>path[i]),length:total,roads:spec.roads.map(v=>v.map(n=>n*scale)),junctions:spec.junctions.map(v=>v.map(n=>n*scale))};
+  r.corners=junctionCorners(r);
   let last=-1;
   r.events=spec.markers.map(([kind,x,z,direction],i)=>{
     const mapped=remapRoadPoint(spec,id,p(x,z)),point=p(mapped.x*scale,mapped.z*scale),n=nearest(r,point,last+0.01);last=n.s;
