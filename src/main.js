@@ -10,7 +10,7 @@ import {LightingExam,questions,lightNames} from './lights.js';
 import {mountLightStalk} from './light-stalk.js';
 import {LearningDriver} from './learning.js';
 import {EngineSound} from './engine-sound.js';
-import {approachSpeech} from './project-voice.js';
+import {APPROACH_DISTANCE,approachProject,approachSpeech} from './project-voice.js';
 const engineSound=new EngineSound();
 const images={1:new URL('../input/mmexport1790494901618.jpg',import.meta.url).href,9:new URL('../input/mmexport1790494903835.jpg',import.meta.url).href,10:new URL('../input/mmexport1790494905745.jpg',import.meta.url).href,lights:new URL('../input/mmexport1790495905014.jpg',import.meta.url).href};
 const $=s=>document.querySelector(s);
@@ -166,14 +166,19 @@ function renderUI(){
  if(mode==='exam'&&e.silent){e=sim.events.find(x=>x.s>e.s&&!x.silent&&x.status==='pending')??e;}
  const maneuver=sim.events.find(x=>x.status==='pending'&&(x.meetingEntered||x.overtakeEntered));
  if(maneuver)e=maneuver;
- const approaching=e.s-sim.progress<80;
+ const approaching=e.s-sim.progress<APPROACH_DISTANCE;
  $('#upcoming').textContent=sim.parkingReady?'靠边停车区域':`${approaching?'当前项目':'前方项目'} · ${Math.max(0,Math.round(e.s-sim.progress))}m`;
  if(maneuver)$('#upcoming').textContent=maneuver.kind==='meet'?(maneuver.meetingStart===undefined?'会车 · 听口令':`会车 · 剩余 ${Math.min(MEETING_SECONDS,Math.max(0,MEETING_SECONDS-(sim.time-maneuver.meetingStart))).toFixed(1)} 秒`):(maneuver.travelStart===undefined?'超车 · 听口令':`超车 · 剩余 ${Math.max(0,150-(sim.distance-maneuver.travelStart)).toFixed(0)} 米`);
  $('#instruction').textContent=mode==='exam'&&!approaching?'按路线行驶':e.label;
  $('#hint').textContent=mode==='learn'?learner.caption:sim.parkingReady?`距右边线约 ${Math.max(-99,Math.round(sim.curbGap*100))} cm。停稳后拉驻车制动、挂 P 挡。`:mode==='practice'?e.hint:'留意道路标志，按口令完成考试。';
  $('#curb-distance').classList.toggle('hidden',!sim.parkingReady);$('#curb-distance').textContent=`距右边线 ${Math.max(-99,Math.round(sim.curbGap*100))} cm`;
  $('#finish').classList.toggle('hidden',!sim.parkingReady);
- if(mode!=='learn'&&approaching&&lastAnnounced!==e.id){lastAnnounced=e.id;const text=approachSpeech(e);if(text)speak(text,null,true);}
+ if(mode!=='learn'){
+  const nextVoice=approachProject(sim,e);
+  if(nextVoice.s-sim.progress<APPROACH_DISTANCE&&lastAnnounced!==nextVoice.id){
+   lastAnnounced=nextVoice.id;const text=approachSpeech(nextVoice);if(text)speak(text,null,true);
+  }
+ }
  if(sim.message!==noticeText&&sim.faults.some(f=>f.text===sim.message))showNotice(sim.message);
  if(performance.now()>noticeUntil)$('#notice').classList.add('hidden');
  map($('#mini-map'),sim.route,sim);
