@@ -4,25 +4,27 @@ export const laneNames={1:'内侧车道',2:'中间车道',3:'最右侧车道'};
 const plans={
  1:{stages:[[0,1,0,'N',3],[3,4,2,'E',3],[4,5,2,'E',[3,2,1]],[5,6,2,'E',1],[8,9,1,'N',1],[13,15,1,'S',2],[15,16,1,'S',[2,1]],[16,17,1,'S',1],[17,18,1,'S',[1,2]],[18,19,1,'S',2],[19,20,1,'S',[2,3]],[20,21,1,'S',3],[23,24,4,'W',3],[26,27,0,'N',3]],changes:{2:[3,1,5],7:[2,1,18,2,16],11:[2,3,20]},gap:[1,-318,-264]},
  9:{stages:[[0,1,0,'W',3],[1,2,0,'W',[3,2]],[2,3,0,'W',2],[3,4,0,'W',[2,3]],[4,5,0,'W',3],[7,8,1,'N',3],[8,9,1,'N',[3,2]],[9,10,1,'N',2],[10,11,1,'N',[2,1]],[11,12,1,'N',1],[16,17,1,'S',1],[19,20,0,'E',2],[20,21,0,'E',[2,3]],[21,23,0,'E',3]],changes:{2:[3,2,4,3,2],5:[3,2,9],7:[2,1,11]},gap:[1,-1015,-950],parking:20},
- 10:{stages:[[0,1,0,'E',3],[1,2,0,'E',[3,2]],[2,4,0,'E',3],[4,5,0,'E',[3,2]],[5,6,0,'E',[2,1]],[8,9,1,'N',1],[13,14,1,'S',2],[14,15,1,'S',[2,1]],[15,16,1,'S',1],[16,17,1,'S',[1,2]],[17,18,1,'S',2],[18,19,1,'S',[2,3]],[19,20,1,'S',3],[22,23,0,'W',3],[23,24,0,'W',[3,2]],[24,25,0,'W',2],[25,26,0,'W',[2,3]],[26,29,0,'W',3]],changes:{1:[3,2,2],3:[3,2,5],9:[2,1,17,2,15],11:[2,3,19],13:[3,2,26,3,24]},gap:[1,-1000,-934]}
+ 10:{stages:[[0,1,0,'E',3],[1,2,0,'E',3],[2,4,0,'E',3],[4,5,0,'E',[3,2]],[5,6,0,'E',[2,1]],[8,9,1,'N',1],[13,14,1,'S',2],[14,15,1,'S',[2,1]],[15,16,1,'S',1],[16,17,1,'S',[1,2]],[17,18,1,'S',2],[18,19,1,'S',[2,3]],[19,20,1,'S',3],[22,23,0,'W',3],[23,24,0,'W',[3,2]],[24,25,0,'W',2],[25,26,0,'W',[2,3]],[26,29,0,'W',3]],changes:{1:['bay',3,2],3:[3,2,5],9:[2,1,17,2,15],11:[2,3,19],13:[3,2,26,3,24]},bays:[[0,2],[22,23]],gap:[1,-1000,-934]}
 };
 export function attachLaneRules(route){
  const plan=plans[route.id];
  route.laneStages=plan.stages.map(([a,b,road,direction,lanes],i)=>({id:`${route.id}-${i}`,from:route.keyPath[a].s,to:route.keyPath[b].s,road,direction,lanes:Array.isArray(lanes)?lanes:[lanes]}));
+ route.bayAccess=plan.bays?.map(([a,b])=>[route.keyPath[a].s,route.keyPath[b].s+8])??[];
  route.medianGaps=[{road:plan.gap[0],from:plan.gap[1]*route.scale,to:plan.gap[2]*route.scale},{road:1,from:-78*route.scale,to:-62*route.scale}];
- if(route.id!==1)route.medianGaps.push({road:0,from:62*route.scale,to:78*route.scale},{road:0,from:-78*route.scale,to:-62*route.scale});
+ if(route.id!==1)route.medianGaps.push({road:0,from:62*route.scale,to:78*route.scale},{road:0,from:-78*route.scale,to:-62*route.scale},{road:1,from:62*route.scale,to:78*route.scale});
  for(const [index,[from,to,end,back,returnIndex]]of Object.entries(plan.changes)){
   const e=route.events[index],stage=route.laneStages.find(l=>e.s>=l.from-.01&&e.s<=l.to+.01);
   const target=route.keyPath[returnIndex??end];
+  const laneStage={road:stage.road,direction:stage.direction,bay:from==='bay'};
   e.laneChange={
-   from:laneNumber(route,e.point,stage),
-   to:laneNumber(route,target,stage),
-   back:back&&laneNumber(route,route.keyPath[end],stage),
-   road:stage.road,direction:stage.direction
+   from:laneNumber(route,e.point,laneStage),
+   to:laneNumber(route,target,laneStage),
+   back:back&&laneNumber(route,route.keyPath[end],laneStage),
+   ...laneStage
   };e.endS=route.keyPath[end].s+8;
   if(back)e.returnS=route.keyPath[returnIndex].s;
   e.hint=`先观察后方，打${e.direction==='left'?'左':'右'}灯满 3 秒，从${from===3?'最右侧车道':laneNames[from]}进入${laneNames[to]}。${back?'听到返回提示后重新观察右后方，右灯满 3 秒再返回'+laneNames[back]+'。':'完成后关闭转向灯。'}`;
-  if(route.id===10&&Number(index)===1)e.hint='先观察左后方，打左灯满 3 秒，从最外侧车道向左并入相邻车道；合流后关闭转向灯并保持该车道。';
+  if(from==='bay')e.hint='先观察左后方，打左灯满 3 秒，从停靠段向左并入相邻的第三车道。并入后关闭转向灯，保持车道。';
  }
  for(const e of route.events){if(e.kind==='meet')e.hint='5 秒内制动减速、左右观察，在车道内稍向右靠；听到会车结束后平稳回正，不跨车道。';if(e.kind==='overtake')e.hint+=' 从开始超车口令播完后，150 米内完成超越及回位。';}
  for(const e of route.events)if(['right','left','uturn'].includes(e.kind)){
@@ -38,7 +40,12 @@ export function lateralPosition(route,position,stage){
  const road=route.roads[stage.road];
  return stage.direction==='N'?position.x-road[0]:stage.direction==='S'?road[0]-position.x:stage.direction==='E'?position.z-road[1]:road[1]-position.z;
 }
-export function laneNumber(route,position,stage){const d=lateralPosition(route,position,stage)/route.scale,edges=sectionForPosition(route,position,stage).edges;if(d<edges[0]-1e-9||d>edges.at(-1)+1e-9)return 0;const lane=edges.findIndex((v,i)=>i&&d<v);return lane>0?lane:edges.length-1;}
+export function laneNumber(route,position,stage){
+ const d=lateralPosition(route,position,stage)/route.scale,{edges,parking}=sectionForPosition(route,position,stage);
+ if(stage.bay&&parking&&d>parking.inner&&d<=parking.outer)return 'bay';
+ if(d<edges[0]-1e-9||d>edges.at(-1)+1e-9)return 0;
+ const lane=edges.findIndex((v,i)=>i&&d<v);return lane>0?lane:edges.length-1;
+}
 export function withinLane(route,position,stage,lane){
  const d=lateralPosition(route,position,stage),edges=sectionForPosition(route,position,stage).edges;
  return lane>0&&lane<edges.length&&d-.9>=edges[lane-1]*route.scale-.08&&d+.9<=edges[lane]*route.scale+.08;
@@ -70,19 +77,55 @@ export function junctionRange(route,s){
   if(!range)range={start,end};else range.end=end;
  }return range;
 }
+function insideIsland(corners,p){
+ let inside=false;
+ for(let i=0,j=corners.length-1;i<corners.length;j=i++){
+  const a=corners[j],b=corners[i];
+  if((a.z>p.z)!==(b.z>p.z)&&p.x<a.x+(p.z-a.z)*(b.x-a.x)/(b.z-a.z))inside=!inside;
+ }
+ return inside;
+}
+function clipsPlanter(island,position,heading,scale){
+ const reach=4.5*scale+Math.hypot(.9,2.15);
+ if(Math.abs(position.x-island[0].x)>reach||Math.abs(position.z-island[0].z)>reach)return false;
+ if(insideIsland(island,position))return true;
+ const sin=Math.sin(heading),cos=Math.cos(heading);
+ const corners=island.map(p=>{
+  const x=p.x-position.x,z=p.z-position.z;
+  return {right:x*cos+z*sin,forward:x*sin-z*cos};
+ });
+ // Clip each planter edge against the car's width and length in its own frame.
+ return corners.some((a,i)=>{
+  const b=corners[(i+1)%corners.length];let from=0,to=1;
+  for(const [axis,half] of [['right',.9],['forward',2.15]]){
+   const delta=b[axis]-a[axis];
+   if(Math.abs(delta)<1e-9){if(Math.abs(a[axis])>half)return false;continue;}
+   const edge1=(-half-a[axis])/delta,edge2=(half-a[axis])/delta;
+   from=Math.max(from,Math.min(edge1,edge2));to=Math.min(to,Math.max(edge1,edge2));
+  }
+  return from<=to;
+ });
+}
 export function medianAt(route,p){
+ if(route.turnIslands.some(island=>insideIsland(island,p)))return true;
  if(inJunction(route,p))return false;
+ if(route.medians.some(({vertical,center,from,to,radius})=>{
+  const along=vertical?p.z:p.x,across=vertical?p.x:p.z;
+  const nearest=Math.max(from+radius,Math.min(to-radius,along));
+  return along>=from&&along<=to&&Math.hypot(across-center,along-nearest)<=radius+.9;
+ }))return true;
  return route.roads.some(([x1,z1,x2,z2],road)=>{
   const vertical=x1===x2,along=vertical?p.z:p.x,lateral=vertical?p.x-x1:p.z-z1;
-  if(along<Math.min(vertical?z1:x1,vertical?z2:x2)||along>Math.max(vertical?z1:x1,vertical?z2:x2)||Math.abs(lateral)>.9+sectionForPosition(route,p,{road,direction:vertical?'N':'E'}).median*route.scale)return false;
-  return !route.medianGaps.some(g=>g.road===road&&along>=g.from&&along<=g.to);
+  const {median}=sectionForPosition(route,p,{road,direction:vertical?'N':'E'});
+  return median<1&&along>=(vertical?z1:x1)&&along<=(vertical?z2:x2)&&Math.abs(lateral)<=.9+median*route.scale;
  });
 }
 export function checkLane(sim){
- const r=sim.route;if(medianAt(r,sim.position))return {key:'median',text:'越过道路中央分界'};
+ const r=sim.route;
+ if(medianAt(r,sim.position)||r.turnIslands.some(island=>clipsPlanter(island,sim.position,sim.heading,r.scale)))return {key:'median',text:'越过道路分界或驶上隔离花坛'};
  const stage=laneStage(r,sim.progress);if(!stage||inJunction(r,sim.position)){sim.examLane=null;return null;}
  const d=lateralPosition(r,sim.position,stage),k=r.scale,section=sectionForPosition(r,sim.position,stage);
- const parkingPhase=section.parking&&(sim.progress<=r.events[0].endS||sim.progress>=r.parkingStart);
+ const parkingPhase=section.parking&&(sim.progress<=r.events[0].endS||sim.progress>=r.parkingStart||r.bayAccess.some(([from,to])=>sim.progress>=from&&sim.progress<=to));
  if(parkingPhase&&d-.9>=section.edges.at(-2)*k-.08&&d+.9<=section.parking.outer*k+.08){sim.examLane=null;return null;}
  if(sim.mode==='exam'){
   const violation={key:`lane-${stage.id}`,text:'请保持车道，变道前打灯满三秒并观察后方'};

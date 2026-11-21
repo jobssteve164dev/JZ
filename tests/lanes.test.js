@@ -1,12 +1,12 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {getRoute} from '../src/routes.js';import {Simulation} from '../src/simulation.js';
-import {checkLane} from '../src/lanes.js';
+import {checkLane,medianAt} from '../src/lanes.js';
 // Hand-calculated lane centers from the source lane counts and the schematic road widths.
 // Section-count and arrow fixtures live in road-layout.test.js; old fixed-three-lane expectations are superseded.
 const fixtures=[
  [1,'start',0,'x',-366],[1,'change',0,'z',6.375],[1,'straight',0,'x',5],[1,'meet',0,'x',-9],[1,'bus',0,'z',653.625],
  [9,'start',0,'z',-13.125],[9,'school',0,'x',13.125],[9,'bus',0,'x',5],[9,'cross',1,'x',-5],[9,'meet',0,'z',9],
- [10,'start',0,'z',13.625],[10,'meet',0,'z',13.125],[10,'school',0,'x',5],[10,'bus',0,'x',5],[10,'straight',0,'z',-13.125]
+ [10,'start',0,'z',16.875],[10,'meet',0,'z',13.125],[10,'school',0,'x',5],[10,'bus',0,'x',5],[10,'straight',0,'z',-13.125]
 ];
 for(const [id,kind,n,axis,value] of fixtures)test(`source image ${id} ${kind}/${n} uses the drawn lane`,()=>{
  const r=getRoute(id),e=r.events.filter(e=>e.kind===kind)[n];assert.ok(Math.abs(e.point[axis]/r.scale-value)<.1,`${e.point[axis]/r.scale} != ${value}`);
@@ -15,6 +15,12 @@ function movingStart(z){const s=new Simulation(getRoute(9));s.belt=true;s.gear='
 test('a car in the adjacent lane fails even while close to the reference route',()=>{const s=movingStart(-9);s.step(.1);assert.ok(s.faults.some(f=>f.key.startsWith('lane-')),JSON.stringify(s.faults));});
 test('car body straddling a lane divider outside a change zone is detected',()=>{const s=movingStart(-11);s.step(.1);assert.ok(s.faults.some(f=>f.key.startsWith('lane-')),JSON.stringify(s.faults));});
 test('driving through the physical median is detected independently of progress',()=>{const s=movingStart(0);s.step(.1);assert.ok(s.faults.some(f=>f.key==='median'),JSON.stringify(s.faults));});
+test('a car clipping the raised turn planter is detected before its centre reaches it',()=>{
+ const route=getRoute(9),s=new Simulation(route,'exam'),k=route.scale;
+ s.progress=620.96;s.position={x:17.69*k,z:-17.98*k};s.heading=-44*Math.PI/180;
+ assert.equal(medianAt(route,s.position),false);
+ assert.equal(checkLane(s)?.key,'median');
+});
 test('route 1 parking lane is allowed only while leaving the start and entering the final stop',()=>{
  const r=getRoute(1),k=r.scale,parking=x=>({x:x*k,z:0});
  for(const mode of ['practice','exam']){

@@ -4,7 +4,7 @@ import {roadSection,roadArrows,junctionBounds} from './road-layout.js';
 import {inJunction} from './lanes.js';
 const heading={N:0,E:Math.PI/2,S:Math.PI,W:-Math.PI/2};
 export function buildRoadSurface(route){
- const group=new THREE.Group(),k=route.scale,buffers={surface:[],shoulder:[],white:[],yellow:[],median:[]};
+ const group=new THREE.Group(),k=route.scale,buffers={surface:[],shoulder:[],white:[],yellow:[],median:[],'turn-planter':[],'planter-curb':[]};
  const corners=route.corners;
  const quad=(kind,a,b,c,d,y)=>{for(const p of [a,b,c,a,c,d])buffers[kind].push(p.x,y,p.z);};
  const point=(r,t,d)=>r[0]===r[2]?{x:r[0]+d*k,z:t*k}:{x:t*k,z:r[1]+d*k};
@@ -37,10 +37,11 @@ export function buildRoadSurface(route){
     if(solid||Math.floor((a-from)/4)%3===0){
      const count=Math.min(s0.edges.length,s1.edges.length);for(let i=1;i<count-1;i++)stripe('white',r,a,b,d*s0.edges[i],d*s1.edges[i],.12);
     }
-    if(s0.parking&&s1.parking)stripe('white',r,a,b,d*s0.parking.inner,d*s1.parking.inner,.12);
+    if(s0.parking&&s1.parking&&(route.id===1||s0.parkingBlend===1&&s1.parkingBlend===1||Math.floor((a-from)/4)%3===0)){
+     stripe('white',r,a,b,d*s0.parking.inner,d*s1.parking.inner,.12);
+    }
    }
    if(p0.median<1){stripe('yellow',r,a,b,-.14,-.14,.12);stripe('yellow',r,a,b,.14,.14,.12);}
-   else if(!route.medianGaps.some(g=>g.road===road&&mid*k>=g.from&&mid*k<=g.to))quad('median',point(r,a,-3),point(r,b,-3),point(r,b,3),point(r,a,3),.22);
   }
  });
  for(const {x,z,sx,sz,radius} of corners){
@@ -60,7 +61,29 @@ export function buildRoadSurface(route){
   if(vertical)for(const edge of [z-b.top-3*k,z+b.bottom+3*k].filter(edge=>edge>vertical[1]&&edge<vertical[3]))for(let v=x-b.left+1*k;v<x+b.right;v+=2.4*k)quad('white',{x:v,z:edge-1.8*k},{x:v,z:edge+1.8*k},{x:v+1.3*k,z:edge+1.8*k},{x:v+1.3*k,z:edge-1.8*k},.11);
   if(horizontal)for(const edge of [x-b.left-3*k,x+b.right+3*k].filter(edge=>edge>horizontal[0]&&edge<horizontal[2]))for(let v=z-b.top+1*k;v<z+b.bottom;v+=2.4*k)quad('white',{x:edge-1.8*k,z:v},{x:edge-1.8*k,z:v+1.3*k},{x:edge+1.8*k,z:v+1.3*k},{x:edge+1.8*k,z:v},.11);
  }
- for(const [kind,color]of [['shoulder','#bbc2bd'],['surface','#566269'],['white','#f3f0df'],['yellow','#f6c853'],['median','#7e9d59']]){
+ const plant=(kind,base,top)=>{
+  const curb=buffers['planter-curb'],height=.48*k;
+  for(let i=0;i<base.length;i++){
+   const j=(i+1)%base.length;
+   for(const [p,y] of [[base[i],.05],[base[j],.05],[top[j],height],[base[i],.05],[top[j],height],[top[i],height]])curb.push(p.x,y,p.z);
+  }
+  for(const face of THREE.ShapeUtils.triangulateShape(top.map(p=>new THREE.Vector2(p.x,p.z)),[])){
+   for(const index of face){const p=top[index];buffers[kind].push(p.x,height,p.z);}
+  }
+ };
+ for(const {vertical,center,from,to,radius} of route.medians){
+  const outline=r=>[from+radius,to-radius].flatMap((along,i)=>Array.from({length:13},(_,step)=>{
+   const angle=step*Math.PI/12,d=(i?-1:1)*r,t=along-d*Math.sin(angle),cross=center+d*Math.cos(angle);
+   return vertical?{x:cross,z:t}:{x:t,z:cross};
+  }));
+  plant('median',outline(radius),outline(radius-.17*k));
+ }
+ for(const island of route.turnIslands){
+  const center=island.reduce((sum,p)=>({x:sum.x+p.x/island.length,z:sum.z+p.z/island.length}),{x:0,z:0});
+  const top=island.map(p=>({x:p.x+(center.x-p.x)*.12,z:p.z+(center.z-p.z)*.12}));
+  plant('turn-planter',island,top);
+ }
+ for(const [kind,color]of [['shoulder','#bbc2bd'],['surface','#566269'],['white','#f3f0df'],['yellow','#f6c853'],['median','#8fad59'],['turn-planter','#8fad59'],['planter-curb','#bfc3ae']]){
   const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(buffers[kind],3));geometry.computeVertexNormals();
   const material=new THREE.MeshStandardMaterial({color,roughness:.9,side:THREE.DoubleSide});const mesh=new THREE.Mesh(geometry,material);mesh.name=kind==='surface'?'road-surface':`road-${kind}`;group.add(mesh);
  }

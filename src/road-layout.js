@@ -26,13 +26,15 @@ const profiles={
   [1,'N',-35,[S,S,S,S]],[1,'S',35,[S,S,S]],
   [1,'N',-940,[L,L,null]],[1,'N',-410,[S,S,S]],[1,'S',-490,[S,S,S]]
  ]},
- 10:{two:[],yellow:[],zones:[
-  [0,'E',-650,'out',4,240,160,'outer'],
+ 10:{two:[],yellow:[],parking:[
+  {road:0,direction:'E',width:3.25,span:[-610,-584,-488,-460],path:[[-610,-510,1,1],[-510,-485,1,0]]},
+  {road:0,direction:'W',width:3.25,span:[-180,-140,-17,-1],path:[[-140,-105,0,1],[-105,-17,1,1]]}
+ ],zones:[
   [0,'E',0,'in',5,180,110],[0,'W',0,'in',5,150,100],[1,'S',0,'in',5,160,105],
-  [1,'N',0,'in',4,140,80],[1,'N',0,'out',4,100,40,'outer'],[0,'W',0,'out',4,140,60,'outer']
+  [1,'N',0,'in',4,140,80],[1,'N',0,'out',4,100,40,'outer']
  ],bands:[[1,'N',-1040,-1002,5],[1,'S',-1040,-1002,4]],rows:[
   [0,'E',-85,[SU,S,S,S,R]],[0,'E',-40,[L,S,S,S,R]],[0,'W',85,[SU,S,S,S,R]],[0,'W',40,[L,S,S,S,R]],
-  [0,'W',-35,[S,S,S,S]],[0,'E',35,[S,S,S]],
+  [0,'W',-35,[S,S,S]],[0,'E',35,[S,S,S]],
   [1,'S',-85,[SU,S,S,S,R]],[1,'S',-40,[L,S,S,S,R]],[1,'N',40,[L,S,S,S]],
   [1,'N',-35,[S,S,S,S]],[1,'S',35,[S,S,S]],
   [1,'N',-925,[L,L,null]],[1,'N',-390,[S,S,S]],[1,'S',-470,[S,S,S]]
@@ -40,6 +42,13 @@ const profiles={
 };
 const edgesFor=(count,median,widthCount=count)=>Array.from({length:count+1},(_,i)=>median+4*widthCount*i/count+(i===count?.25:0));
 const stableEdgesFor=(count,base,median)=>edgesFor(count,median,base);
+export function bayWidth(profile,along){
+ if(!profile?.span)return profile?.width??0;
+ const [from,fullFrom,fullTo,to]=profile.span;
+ const t=Math.max(0,Math.min(1,(along-from)/(fullFrom-from),(to-along)/(to-fullTo)));
+ return profile.width*t*t*(3-2*t);
+}
+export function roadBays(id){return (profiles[id].parking??[]).filter(profile=>profile.span);}
 export function roadSection(id,road,direction,along){
  const p=profiles[id],base=p.two.includes(road)?2:3,median=p.yellow.includes(road)?.25:3;
  let count=base,blend=0,approach=null,taperAnchor='inner';
@@ -56,7 +65,8 @@ export function roadSection(id,road,direction,along){
   const start=count-base===2?[baseEdges[0],...baseEdges,baseEdges.at(-1)]:taperAnchor==='outer'?[...baseEdges,baseEdges.at(-1)]:[baseEdges[0],...baseEdges];
   edges=target.map((v,i)=>start[i]+(v-start[i])*blend);
  }
- const parkingProfile=p.parking?.find(v=>v.road===road&&v.direction===direction),parking=parkingProfile?{inner:baseEdges.at(-1),outer:baseEdges.at(-1)+parkingProfile.width}:null;
+ const parkingProfile=p.parking?.find(v=>v.road===road&&v.direction===direction),width=bayWidth(parkingProfile,along);
+ const parking=width>0?{inner:baseEdges.at(-1),outer:baseEdges.at(-1)+width}:null;
  let parkingBlend=0;
  for(const [from,to,fromBlend,toBlend]of parkingProfile?.path??[])if(along>=from&&along<=to)parkingBlend=fromBlend+(toBlend-fromBlend)*(along-from)/(to-from);
  const roadEdges=parking?[...edges,parking.outer]:edges;
@@ -127,12 +137,46 @@ export function junctionCorners(route){
   const xSides=[-1,1].filter(sx=>(route.roads[horizontal][sx<0?0:2]-x)*sx>0);
   const zSides=[-1,1].filter(sz=>(route.roads[vertical][sz<0?1:3]-z)*sz>0);
   return xSides.flatMap(sx=>zSides.map(sz=>{
-   const dx=roadSection(route.id,vertical,sx>0?'N':'S',z/k).roadEdges.at(-1)*k;
-   const dz=roadSection(route.id,horizontal,sz>0?'E':'W',x/k).roadEdges.at(-1)*k;
    // The main north corners on routes 9 and 10 have the wider sweep shown in the drawings.
    const wide=route.id!==1&&z===0&&sz<0;
    const routeOneTurn=route.id===1&&((index===0&&sx>0&&sz>0)||(index===4&&sx>0&&sz<0)||(index===5&&sx<0&&sz<0));
-   return {x:x+sx*dx,z:z+sz*dz,sx,sz,radius:(wide?20:routeOneTurn?14:8)*k,vertical,horizontal,junction:index};
+   const radius=wide?20:routeOneTurn?14:8;
+   const v=roadSection(route.id,vertical,sx>0?'N':'S',z/k+sz*radius);
+   const h=roadSection(route.id,horizontal,sz>0?'E':'W',x/k+sx*radius);
+   return {x:x+sx*v.roadEdges.at(-1)*k,z:z+sz*h.roadEdges.at(-1)*k,sx,sz,radius:radius*k,vertical,horizontal,junction:index,wide,
+    innerX:x+sx*v.edges.at(-1)*k,innerZ:z+sz*h.edges.at(-1)*k};
   }));
  });
+}
+
+export function roadGreens(route){
+ const k=route.scale;
+ const medians=route.roads.flatMap((r,road)=>{
+  const vertical=r[0]===r[2],center=vertical?r[0]:r[1],from=vertical?r[1]:r[0],to=vertical?r[3]:r[2];
+  const width=roadSection(route.id,road,vertical?'N':'E',from/k).median*k;
+  if(width<k||(route.id!==1&&road===2))return [];
+  const gaps=route.medianGaps.filter(g=>g.road===road).map(g=>[g.from,g.to]);
+  for(const [x,z] of route.junctions){
+   if((vertical?x:z)!==center)continue;
+   const b=junctionBounds(route,x,z);
+   gaps.push(vertical?[z-b.top,z+b.bottom]:[x-b.left,x+b.right]);
+  }
+  const beds=[];let start=from;
+  for(const [a,b] of [...gaps,[to,to]].sort((a,b)=>a[0]-b[0])){
+   const end=Math.min(to,a);
+   if(end-start>k)beds.push({vertical,center,from:start,to:end,radius:Math.min(width,(end-start)/2)});
+   start=Math.max(start,b);
+  }
+  return beds;
+ });
+ // Each triangle sits between the straight lanes and the wide right-turn lane.
+ const turnIslands=route.corners.filter(c=>c.wide).map(({innerX,innerZ,sx,sz})=>{
+  const leg=4.5,inset=1.5;
+  const point=(x,z)=>({x:innerX+sx*x*k,z:innerZ+sz*z*k});
+  return [point(0,0),...Array.from({length:9},(_,i)=>{
+   const t=i/8,u=1-t;
+   return point(u*u*leg+2*u*t*inset,t*t*leg+2*u*t*inset);
+  })];
+ });
+ return {medians,turnIslands};
 }
