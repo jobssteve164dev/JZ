@@ -1,8 +1,7 @@
 name: CI
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -20,4 +19,12 @@ jobs:
       - name: Check generated JavaScript
         run: |
           node --check dist/sw.js
-          for file in dist/assets/*.js; do node --check "$file"; done
+          for file in dist/assets/*.js; do node --check "$file" || exit; done
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 3

@@ -1,0 +1,65 @@
+name: Release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+  security:
+    uses: ./.github/workflows/security.yml
+  publish:
+    needs: [ci, security]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-wujiang-km3
+      queue: max
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check the release is still current
+        id: release
+        shell: bash
+        run: |
+          latest=$(git ls-remote --exit-code origin refs/heads/main | cut -f1)
+          if [[ "$latest" == "$GITHUB_SHA" ]]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Skipped because main already has a newer commit." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.release.outputs.current == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.release.outputs.current == 'true'
+      - uses: actions/download-artifact@v4
+        if: steps.release.outputs.current == 'true'
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+      - name: Publish the verified build
+        id: deploy
+        if: steps.release.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        shell: bash
+        run: |
+          latest=$(git ls-remote --exit-code origin refs/heads/main | cut -f1)
+          if [[ "$latest" != "$GITHUB_SHA" ]]; then
+            echo "Skipped because main advanced during release preparation." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'CLOUDFLARE_API_TOKEN is missing'; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo 'CLOUDFLARE_ACCOUNT_ID is missing'; exit 1; }
+          npm run deploy
+          echo "published=true" >> "$GITHUB_OUTPUT"
+      - name: Verify the public site serves this build
+        if: steps.deploy.outputs.published == 'true'
+        run: node scripts/verify-deployment.js

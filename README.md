@@ -35,11 +35,11 @@ npm run dev
 
 ## 验证
 
-`npm test` 覆盖路线顺序、长度、车辆操作、灯光、评分与三条完整驾驶。`npm audit --audit-level=high` 检查依赖，`npm run build` 生成最终页面和离线缓存。CI 与 Security 工作流不会自动部署。
+`npm test` 覆盖路线顺序、长度、车辆操作、灯光、评分与三条完整驾驶。`npm audit --audit-level=high` 检查依赖，`npm run build` 生成最终页面和离线缓存。
 
 ## 部署
 
-Cloudflare Workers 静态资源，域名 `km3.szlk.uk`。在受控环境设置 `CLOUDFLARE_API_TOKEN` 与 `CLOUDFLARE_ACCOUNT_ID`，构建并验收后运行 `npm run deploy`。不在仓库保存凭据。
+推送到 `main` 后，GitHub Actions 的 Release 工作流会运行 CI 和 Security，通过后把同一份构建发布到 `km3.szlk.uk`，并核对线上首页与离线资源。生产令牌保存在 GitHub Actions Secret `CLOUDFLARE_API_TOKEN`，账户标识保存在 Actions 变量 `CLOUDFLARE_ACCOUNT_ID`。如需手动发布，在受控环境构建并验收后运行 `npm run deploy`，再用 `node scripts/verify-deployment.js` 核对线上版本。
 
 ## 资料与边界
 
