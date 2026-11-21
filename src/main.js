@@ -11,6 +11,7 @@ import {mountLightStalk} from './light-stalk.js';
 import {LearningDriver} from './learning.js';
 import {EngineSound} from './engine-sound.js';
 import {APPROACH_DISTANCE,approachProject,approachSpeech} from './project-voice.js';
+import {bayWidth,roadBays} from './road-layout.js';
 const engineSound=new EngineSound();
 const images={1:new URL('../input/mmexport1790494901618.jpg',import.meta.url).href,9:new URL('../input/mmexport1790494903835.jpg',import.meta.url).href,10:new URL('../input/mmexport1790494905745.jpg',import.meta.url).href,lights:new URL('../input/mmexport1790495905014.jpg',import.meta.url).href};
 const $=s=>document.querySelector(s);
@@ -42,12 +43,38 @@ function map(canvas,route,state){
  const xy=p=>[ox+(p.x-minX)*scale,oz+(p.z-minZ)*scale];
  c.lineCap='round';c.strokeStyle='#466a65';c.lineWidth=10;
  for(const [x1,z1,x2,z2]of route.roads){c.beginPath();c.moveTo(...xy({x:x1,z:z1}));c.lineTo(...xy({x:x2,z:z2}));c.stroke();}
+ for(const bay of roadBays(route.id)){
+  const [,z]=route.roads[bay.road],side=bay.direction==='E'?1:-1,[from,,,to]=bay.span;
+  const edge=(along,width)=>{
+   const [x,y]=xy({x:along*route.scale,z});
+   return [x,y+side*(5+width*route.scale*scale)];
+  };
+  c.fillStyle='#5b7e77';c.beginPath();c.moveTo(...edge(from,0));
+  for(let i=1;i<=24;i++){
+   const along=from+(to-from)*i/24;
+   c.lineTo(...edge(along,bayWidth(bay,along)));
+  }
+  c.closePath();c.fill();
+ }
  c.fillStyle=c.strokeStyle;
  for(const {vertical,horizontal,sx,sz,radius} of route.corners){
   const [x,y]=xy({x:route.roads[vertical][0],z:route.roads[horizontal][1]});
   const r=Math.max(2,radius*scale);
   c.save();c.translate(x+sx*5,y+sz*5);c.scale(sx,sz);
   c.beginPath();c.moveTo(0,0);c.lineTo(0,r);c.arcTo(0,0,r,0,r);c.closePath();c.fill();c.restore();
+ }
+ c.fillStyle=c.strokeStyle='#b0c975';
+ for(const {vertical,center,from,to,radius} of route.medians){
+  const xyMedian=along=>xy(vertical?{x:center,z:along}:{x:along,z:center});
+  c.lineWidth=Math.max(1.5,radius*scale*2);c.beginPath();
+  c.moveTo(...xyMedian(from+radius));c.lineTo(...xyMedian(to-radius));c.stroke();
+ }
+ for(const island of route.turnIslands){
+  const [base,...vertices]=island.map(xy);
+  const factor=Math.max(1,2.1/(4.5*route.scale*scale));
+  c.beginPath();c.moveTo(...base);
+  for(const [x,y] of vertices)c.lineTo(base[0]+(x-base[0])*factor,base[1]+(y-base[1])*factor);
+  c.closePath();c.fill();
  }
  c.strokeStyle=route.color;c.lineWidth=3;c.lineJoin='round';c.beginPath();route.path.forEach((p,i)=>i?c.lineTo(...xy(p)):c.moveTo(...xy(p)));c.stroke();
  for(const [i,p]of [route.path[0],route.path.at(-1)].entries()){const[x,y]=xy(p);c.fillStyle=i?'#f4ce80':'#b5f1d4';c.beginPath();c.arc(x,y,5,0,Math.PI*2);c.fill();}

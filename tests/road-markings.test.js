@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import * as THREE from 'three';
 import {at,getRoute} from '../src/routes.js';
-import {inJunction} from '../src/lanes.js';
+import {inJunction,medianAt} from '../src/lanes.js';
 import {roadSection} from '../src/road-layout.js';
 const m=await import('../src/road-markings.js').catch(()=>({}));
 
@@ -57,8 +57,8 @@ test('route 1 parking divider stays straight where three travel lanes begin spli
 const renderedTransitions=[
  ['route 1 starting approach',1,0,'N',85,140],['route 1 southbound exit',1,1,'S',65,140],
  ['route 9 northbound approach',9,1,'N',80,140],['route 9 northbound exit',9,1,'N',-100,-40],['route 9 opposite U-turn side',9,1,'S',-1026,-1006],
- ['route 10 starting road',10,0,'E',-490,-410],['route 10 northbound approach',10,1,'N',80,140],['route 10 northbound exit',10,1,'N',-100,-40],
- ['route 10 opposite U-turn side',10,1,'S',-1022,-1002],['route 10 return exit',10,0,'W',-140,-60]
+ ['route 10 northbound approach',10,1,'N',80,140],['route 10 northbound exit',10,1,'N',-100,-40],
+ ['route 10 opposite U-turn side',10,1,'S',-1022,-1002]
 ];
 const surfaces=new Map();
 for(const [name,id,road,direction,lo,hi]of renderedTransitions)test(`${name} renders all moving divider lines inside the fixed road edges`,()=>{
@@ -76,5 +76,56 @@ for(const [name,id,road,direction,lo,hi]of renderedTransitions)test(`${name} ren
   const x=vertical?r[0]+lateral*k:sample.mid*k,z=vertical?sample.mid*k:r[1]+lateral*k;
   const ray=new THREE.Raycaster(new THREE.Vector3(x,10,z),new THREE.Vector3(0,-1,0));
   assert.ok(ray.intersectObject(surface,true).some(hit=>hit.object.name==='road-white'),`${name} divider ${i} is absent from the final mesh`);
+ }
+});
+
+test('route 10 renders two small paved bays beyond the fixed three-lane edge',()=>{
+ const r=getRoute(10),g=m.buildRoadSurface(r),k=r.scale;g.updateMatrixWorld(true);
+ const hit=(x,z,name)=>new THREE.Raycaster(new THREE.Vector3(x*k,10,z*k),new THREE.Vector3(0,-1,0)).intersectObject(g,true).some(v=>v.object.name===name);
+ for(const [x,z] of [[-550,17],[-65,-17]]){
+  assert.ok(hit(x,z,'road-surface'));
+  assert.ok(hit(x,Math.sign(z)*15.25,'road-white'));
+  assert.ok(!hit(x,z,'direction-arrows'));
+ }
+ assert.ok(!hit(-400,17,'road-surface'));
+ assert.ok(!hit(-200,-17,'road-surface'));
+});
+for(const id of [9,10])test(`route ${id}: the two wide curves have a planter on the inside of the turn lane`,()=>{
+ const r=getRoute(id),g=m.buildRoadSurface(r),k=r.scale;g.updateMatrixWorld(true);
+ for(const sx of [-1,1]){
+  const x=sx*16.1*k,z=-16.1*k;
+  const hits=new THREE.Raycaster(new THREE.Vector3(x,10,z),new THREE.Vector3(0,-1,0)).intersectObject(g,true);
+  assert.ok(hits.some(hit=>hit.object.name==='road-turn-planter'&&hit.point.y>.2));
+  assert.ok(medianAt(r,{x,z}));
+ }
+ const e=r.events.find(e=>e.kind==='right');
+ const headingAtBend=id===9?-Math.PI/4:-3*Math.PI/4;
+ const positions=[];
+ for(let s=e.assessmentStart;s<=e.endS;s+=.5){
+  const {x,z,heading}=at(r,s);
+  positions.push({x,z,heading});
+  for(const u of [-.9,.9])for(const v of [-2.15,2.15]){
+   const px=x+u*Math.cos(heading)+v*Math.sin(heading),pz=z+u*Math.sin(heading)-v*Math.cos(heading);
+   const hits=new THREE.Raycaster(new THREE.Vector3(px,10,pz),new THREE.Vector3(0,-1,0)).intersectObject(g.getObjectByName('road-turn-planter'));
+   assert.equal(hits.length,0,'the turning car must stay beside the planter');
+  }
+ }
+ const midpoint=positions.sort((a,b)=>Math.abs(a.heading-headingAtBend)-Math.abs(b.heading-headingAtBend))[0];
+ const island=r.turnIslands.find(points=>Math.sign(points[0].x)===(id===9?1:-1));
+ const centroid=island.reduce((sum,p)=>({x:sum.x+p.x/island.length,z:sum.z+p.z/island.length}),{x:0,z:0});
+ assert.ok((centroid.x-midpoint.x)*Math.cos(midpoint.heading)+(centroid.z-midpoint.z)*Math.sin(midpoint.heading)<-.9,'the planter must be to the left of right-turning traffic');
+});
+test('median planters are raised and leave a clear U-turn opening',()=>{
+ for(const id of [1,9,10]){
+  const r=getRoute(id),g=m.buildRoadSurface(r),k=r.scale;g.updateMatrixWorld(true);
+  const ray=z=>new THREE.Raycaster(new THREE.Vector3(0,10,z*k),new THREE.Vector3(0,-1,0)).intersectObject(g.getObjectByName('road-median'));
+  assert.ok(ray(-110).some(hit=>hit.point.y>.35));
+  assert.equal(ray(-70).length,0);
+  if(id!==1){
+   assert.ok(ray(42).some(hit=>hit.point.y>.35),'short southern planter is visible');
+   assert.equal(ray(70).length,0,'the opening south of the junction is paved');
+   assert.equal(medianAt(r,{x:0,z:70*k}),false);
+   assert.ok(ray(110).some(hit=>hit.point.y>.35),'long southern planter resumes after the opening');
+  }
  }
 });

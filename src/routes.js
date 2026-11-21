@@ -1,5 +1,5 @@
 import {attachLaneRules,junctionRange} from './lanes.js';
-import {junctionCorners,remapRoadPoint} from './road-layout.js';
+import {junctionCorners,remapRoadPoint,roadGreens} from './road-layout.js';
 export const labels={start:'起步',right:'路口右转',left:'路口左转',change:'变更车道',straight:'直线行驶',uturn:'掉头',meet:'会车',overtake:'超车',cross:'路口直行',school:'学校区域',bus:'公交车站',park:'靠边停车'};
 export const hints={start:'系好安全带，挂 D 挡，松驻车制动；打左灯满 3 秒，观察后平稳起步。',right:'提前打右灯，观察右后方；减速沿右转车道转弯，礼让被放行的车辆和行人。',left:'提前打左灯，观察左后方；遵守信号，减速左转。',change:'先观察、打灯满 3 秒，再平稳转向进入相邻车道，完成后关灯。',straight:'目视远处，保持车道；方向轻微修正，避免急打方向。',uturn:'打左灯满 3 秒，观察左后方；减速到 10 km/h 左右完成掉头。',meet:'观察对向来车，减速靠右，保持安全间距。',overtake:'观察左后方，左灯满 3 秒后超车；驶过后观察右后方，右灯满 3 秒再返回。',cross:'提前减速并左右观察，停车线前看信号，礼让行人。',school:'留意学校标志，提前点刹，速度低于 30 km/h，左右观察。',bus:'留意公交站牌，提前点刹，速度低于 30 km/h，注意上下车行人。',park:'右灯满 3 秒，观察右后方；车身距右边线 30 cm 内停稳，拉驻车制动，挂 P 挡。'};
 const p=(x,z)=>({x,z});
@@ -19,7 +19,7 @@ const specs={
     markers:[['start',650,-13],['straight',550,-13],['overtake',350,-13],['right',45,-13],['school',13,-110],['change',13,-150,'left'],['cross',9,-420],['change',9,-570,'left'],['bus',5,-850],['uturn',5,-955],['cross',-5,-480],['left',-5,-45],['meet',180,9],['park',450,13]],
     lights:[[-5,-28,11]],signs:[['school',13,-110],['bus',5,-850]]},
   10:{name:'十号线',color:'#f16f55',image:'mmexport1790494905745.jpg',subtitle:'西侧起步 · 回程直线行驶',
-    points:[[-550,13],[-510,13],[-485,11],[-400,13],[-270,13],[-230,9],[-20,5],[3,3],[5,-18],[5,-950],[3,-965],[-2,-972],[-7,-965],[-9,-950],[-9,-850],[-5,-830],[-5,-810],[-9,-790],[-9,-240],[-13,-200],[-13,-35],[-13,-13],[-35,-13],[-230,-13],[-265,-9],[-290,-9],[-325,-13],[-460,-13],[-490,-13],[-550,-13]],
+    points:[[-550,13],[-510,13],[-485,13],[-400,13],[-270,13],[-230,9],[-20,5],[3,3],[5,-18],[5,-950],[3,-965],[-2,-972],[-7,-965],[-9,-950],[-9,-850],[-5,-830],[-5,-810],[-9,-790],[-9,-240],[-13,-200],[-13,-35],[-13,-13],[-35,-13],[-230,-13],[-265,-9],[-290,-9],[-325,-13],[-460,-13],[-490,-13],[-550,-13]],
     roads:[[-650,0,220,0],[0,-1040,0,230],[-100,-430,100,-430]],
     junctions:[[0,0],[0,-430]],
     markers:[['start',-550,13],['change',-510,13,'left'],['meet',-400,13],['change',-270,13,'left'],['left',-45,5],['school',5,-120],['cross',5,-400],['bus',5,-820],['uturn',5,-935],['overtake',-9,-860],['cross',-9,-460],['change',-9,-240,'right'],['right',-13,-40],['change',-230,-13,'left'],['straight',-370,-13],['park',-550,-13]],
@@ -118,6 +118,7 @@ export function getRoute(id){
     return {s:n.s,point:at(r,n.s),offset:i*13,type:'circular',eventId:e.id,movement:e.kind==='cross'?'straight':e.kind};
   });
   attachLaneRules(r);
+  Object.assign(r,roadGreens(r));
   for(const e of r.events)if(['cross','left','right'].includes(e.kind)){
     const range=junctionRange(r,e.s);if(range){e.assessmentStart=range.start;e.endS=range.end;}
   }

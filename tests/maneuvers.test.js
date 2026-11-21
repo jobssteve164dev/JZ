@@ -89,14 +89,14 @@ test('route 1 releases an unfinished meeting before it can hide the overtaking c
  assert.equal(overtake.prewarned,true);assert.equal(s.traffic.find(v=>v.id===overtake.id).active,true);
  assert.ok(s.prompts.some(p=>p.id===`${overtake.id}-prepare`&&p.text.startsWith('前方超车')));
 });
-test('route 10 starts with an adjacent lane change as four lanes are redistributed into three',()=>{
+test('route 10 leaves the bay into the adjacent third travel lane',()=>{
  const r=getRoute(10),e=r.events.find(e=>e.kind==='change'),finish=at(r,e.endS-8);
- assert.deepEqual([e.laneChange.from,e.laneChange.to],[4,3]);
+ assert.deepEqual([e.laneChange.from,e.laneChange.to],['bay',3]);
  assert.equal(laneNumber(r,finish,e.laneChange),3);
 });
-test('route 10 reaches the adjacent third lane through the full width-redistribution taper',()=>{
- const r=getRoute(10),e=r.events.find(e=>e.kind==='change'),stage=e.lateralStage??r.laneStages.find(l=>e.s>=l.from&&e.s<=l.to);
+test('route 10 crosses only the bay divider when merging into the main road',()=>{
+ const r=getRoute(10),e=r.events.find(e=>e.kind==='change'),stage=e.laneChange;
  const lanes=new Set();
  for(let s=r.keyPath[1].s;s<=r.keyPath[3].s;s++)lanes.add(laneNumber(r,at(r,s),stage));
- assert.deepEqual([...lanes],[4,3]);
+ assert.deepEqual([...lanes],['bay',3]);
 });
