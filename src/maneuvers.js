@@ -6,7 +6,7 @@ const MEETING_EXIT_GRACE=40;
 
 export function prompt(sim,event,phase,text){
  if(phase==='start')event.startPrompt={id:`${event.id}-${phase}`,text};
- sim.prompts.push({id:`${event.id}-${phase}`,text});
+ sim.prompts.push({id:`${event.id}-${phase}`,eventId:event.id,text});
 }
 export function updateOvertake(sim,e){
  if(!e.overtakeEntered){e.overtakeEntered=true;e.startPromptQueuedAt=sim.time;if(!sim.waitForSpeech)e.travelStart=sim.distance;prompt(sim,e,'start','开始超车，请在 150 米内完成超越并返回原车道。');}
