@@ -1,8 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Simulation} from '../src/simulation.js';
-import {getRoute} from '../src/routes.js';
+import {getRoute,at} from '../src/routes.js';
+import {laneNumber,withinLane} from '../src/lanes.js';
 import {LearningDriver} from '../src/learning.js';
+
+for(const [id,heading] of [[1,Math.PI],[9,-Math.PI/2],[10,Math.PI]])test(`route ${id}: the car to pass is ahead in the original lane and faces along the road`,()=>{
+ const route=getRoute(id),sim=new Simulation(route),event=route.events.find(e=>e.kind==='overtake');
+ const car=sim.traffic.find(v=>v.id===event.id),stage=event.laneChange,vertical=stage.direction==='S';
+ assert.equal(car.heading,heading);
+ assert.equal(laneNumber(route,car,stage),stage.from);
+ assert.ok(withinLane(route,car,stage,stage.from));
+ const along=p=>vertical?p.z:-p.x;
+ assert.ok(along(car)-along(event.point)>12,'the target must be visible ahead before the lane change');
+ const returnPoint=at(route,event.returnS);
+ assert.ok(along(returnPoint)-along(car)>4.3,'the target must be behind the car when the return instruction begins');
+});
 
 for(const id of [1,9,10])test(`route ${id}: meeting and overtaking leave room for separate instructions and actions`,()=>{
  const s=new Simulation(getRoute(id),'learn'),log=[];

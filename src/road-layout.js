@@ -1,11 +1,16 @@
 // Distances are schematic. Counts and arrow rows are transcribed separately from the diagrams.
 const sign=d=>['N','W'].includes(d)?-1:1;
 const S=['straight'],L=['left'],R=['right'],SU=['straight','uturn'],SR=['straight','right'];
+// Narrow side of each crossing: keep these edges and through-arrow lanes from its wider side.
+const centralAlignment=[[0,'W',0,5,[0,2,3,5],[2,3,4]],[0,'E',0,5,[0,2,3,5],[2,3,4]],[1,'S',0,5,[0,2,3,5],[2,3,4]]];
 const profiles={
  1:{two:[2,3,4],yellow:[0,2,3,4],parking:[{road:0,direction:'N',width:3,path:[[168,180,0,1],[505,555,1,0]]}],zones:[
   [0,'N',0,'in',4,140,85],[2,'E',0,'in',3,190,120],[2,'W',0,'in',3,130,90],
   [1,'N',-300,'in',5,110,75],[1,'S',0,'in',5,150,105],[1,'S',0,'out',4,140,65],
   [1,'S',660,'in',5,170,100]
+ ],aligned:[
+  [1,'S',0,5,[0,1,2,3,5],[1,2,3,4]],[1,'S',660,5,[0,2,3,5],[2,3,4]],
+  [2,'E',0,3,[0,1,3],[1,2]],[2,'W',0,3,[0,1,3],[1,2]]
  ],bands:[[1,'N',-360,-300,5]],rows:[
   [0,'N',160,[L,L,R]],[0,'N',70,[L,L,R,R]],[0,'N',40,[L,L,R,R]],
   [0,'S',290,[['straight','left'],S,SR]],[0,'N',370,[['straight','left'],S,SR]],
@@ -19,7 +24,7 @@ const profiles={
  9:{two:[],yellow:[],zones:[
   [0,'W',0,'in',5,160,105],[0,'E',0,'in',5,150,95],[1,'S',0,'in',5,160,105],
   [1,'N',0,'in',4,140,80],[1,'N',0,'out',4,100,40]
- ],bands:[[1,'N',-1060,-1006,5],[1,'S',-1060,-1006,4]],rows:[
+ ],aligned:centralAlignment,bands:[[1,'N',-1060,-1006,5],[1,'S',-1060,-1006,4]],rows:[
   [0,'W',85,[SU,S,S,S,SR]],[0,'W',40,[L,S,S,S,SR]],[0,'E',-85,[SU,S,S,S,R]],[0,'E',-40,[L,S,S,S,R]],
   [0,'E',40,[S,S,S]],[0,'W',-40,[S,S,S]],
   [1,'S',-85,[SU,S,S,S,R]],[1,'S',-40,[L,S,S,S,R]],[1,'N',40,[L,S,S,S]],
@@ -32,7 +37,7 @@ const profiles={
  ],zones:[
   [0,'E',0,'in',5,180,110],[0,'W',0,'in',5,150,100],[1,'S',0,'in',5,160,105],
   [1,'N',0,'in',4,140,80],[1,'N',0,'out',4,100,40,'outer']
- ],bands:[[1,'N',-1040,-1002,5],[1,'S',-1040,-1002,4]],rows:[
+ ],aligned:centralAlignment,bands:[[1,'N',-1040,-1002,5],[1,'S',-1040,-1002,4]],rows:[
   [0,'E',-85,[SU,S,S,S,R]],[0,'E',-40,[L,S,S,S,R]],[0,'W',85,[SU,S,S,S,R]],[0,'W',40,[L,S,S,S,R]],
   [0,'W',-35,[S,S,S]],[0,'E',35,[S,S,S]],
   [1,'S',-85,[SU,S,S,S,R]],[1,'S',-40,[L,S,S,S,R]],[1,'N',40,[L,S,S,S]],
@@ -42,35 +47,50 @@ const profiles={
 };
 const edgesFor=(count,median,widthCount=count)=>Array.from({length:count+1},(_,i)=>median+4*widthCount*i/count+(i===count?.25:0));
 const stableEdgesFor=(count,base,median)=>edgesFor(count,median,base);
+const smooth=t=>t*t*(3-2*t);
+const interpolate=(a,b,t)=>a+(b-a)*t;
+const midpoint=(edges,lane)=>(edges[lane-1]+edges[lane])/2;
+const junctionAlignmentEnd=65,junctionAlignmentFull=45;
+export function taperStart(edges,count,anchor){
+ if(count===edges.length+1)return [edges[0],...edges,edges.at(-1)];
+ return anchor==='outer'?[...edges,edges.at(-1)]:[edges[0],...edges];
+}
 export function bayWidth(profile,along){
  if(!profile?.span)return profile?.width??0;
  const [from,fullFrom,fullTo,to]=profile.span;
  const t=Math.max(0,Math.min(1,(along-from)/(fullFrom-from),(to-along)/(to-fullTo)));
- return profile.width*t*t*(3-2*t);
+ return profile.width*smooth(t);
 }
 export function roadBays(id){return (profiles[id].parking??[]).filter(profile=>profile.span);}
 export function roadSection(id,road,direction,along){
  const p=profiles[id],base=p.two.includes(road)?2:3,median=p.yellow.includes(road)?.25:3;
- let count=base,blend=0,approach=null,taperAnchor='inner';
+ let count=base,blend=0,approach=null,taperAnchor='inner',zoneAt;
  for(const [r,d,at,kind,n,start,full,anchor]of p.zones){
   if(r!==road||d!==direction)continue;
   const distance=(kind==='in'?at-along:along-at)*sign(d);
-  if(distance>=0&&distance<start){count=n;blend=Math.min(1,(start-distance)/(start-full));taperAnchor=anchor??'inner';if(kind==='in')approach={start,distance};break;}
+  if(distance>=0&&distance<start){count=n;blend=Math.min(1,(start-distance)/(start-full));taperAnchor=anchor??'inner';zoneAt=at;if(kind==='in')approach={start,distance};break;}
  }
  for(const [r,d,from,to,n]of p.bands)if(r===road&&d===direction&&along>=from&&along<to){count=n;blend=id===1?1:Math.min(1,(to-along)/20);}
- const baseEdges=edgesFor(base,median),target=stableEdgesFor(count,base,median);
- let edges=target;
- if(count!==base&&blend<1){
-  // Transition every internal divider while keeping the median and outside road edges continuous.
-  const start=count-base===2?[baseEdges[0],...baseEdges,baseEdges.at(-1)]:taperAnchor==='outer'?[...baseEdges,baseEdges.at(-1)]:[baseEdges[0],...baseEdges];
-  edges=target.map((v,i)=>start[i]+(v-start[i])*blend);
+ const baseEdges=edgesFor(base,median);
+ let target=stableEdgesFor(count,base,median),receivingTaper=false,straightCenters;
+ const alignment=p.aligned.find(([r,d,at,,keep])=>r===road&&d===direction&&keep.length===count+1&&(count===base?Math.abs(along-at)<junctionAlignmentEnd:zoneAt===at));
+ if(alignment){
+  const [,,at,wide,keep,through]=alignment,wideEdges=stableEdgesFor(wide,base,median);
+  const t=count===base?smooth(Math.min(1,(junctionAlignmentEnd-Math.abs(along-at))/(junctionAlignmentEnd-junctionAlignmentFull))):1;
+  if(t===1&&(count===base||blend===1))straightCenters=through.map(lane=>midpoint(wideEdges,lane));
+  target=keep.map((edge,i)=>interpolate(target[i],wideEdges[edge],t));
+  receivingTaper=t<1;
  }
+ const taper=count!==base&&blend<1;
+ const transition=count===4&&base===3?smooth(blend):blend;
+ const start=taper?taperStart(baseEdges,count,taperAnchor):target;
+ const edges=taper?target.map((v,i)=>interpolate(start[i],v,transition)):target;
  const parkingProfile=p.parking?.find(v=>v.road===road&&v.direction===direction),width=bayWidth(parkingProfile,along);
  const parking=width>0?{inner:baseEdges.at(-1),outer:baseEdges.at(-1)+width}:null;
  let parkingBlend=0;
  for(const [from,to,fromBlend,toBlend]of parkingProfile?.path??[])if(along>=from&&along<=to)parkingBlend=fromBlend+(toBlend-fromBlend)*(along-from)/(to-from);
  const roadEdges=parking?[...edges,parking.outer]:edges;
- return {edges,roadEdges,parking,parkingBlend,count,base,median,blend,approach,taperAnchor,taper:count!==base&&blend<1};
+ return {edges,roadEdges,parking,parkingBlend,count,base,median,blend,transition,target,straightCenters,approach,taperAnchor,taper,receivingTaper};
 }
 export function semanticLane(lane,count){return lane===1?1:lane===3?count:Math.ceil(count/2);}
 export function sectionLane(section,lane){
@@ -78,11 +98,11 @@ export function sectionLane(section,lane){
  return section.count===4&&section.base===3&&section.taperAnchor==='inner'?Math.min(section.count,mapped+1):mapped;
 }
 export function laneCenter(section,lane){
- const mapped=sectionLane(section,lane),current=(section.edges[mapped-1]+section.edges[mapped])/2;
- if(section.taper&&!(section.count===4&&section.base===3&&section.taperAnchor==='inner')){
-  const base=edgesFor(section.base,section.median),target=stableEdgesFor(section.count,section.base,section.median),n=semanticLane(lane,section.base);
-  const from=(base[n-1]+base[n])/2,to=(target[mapped-1]+target[mapped])/2;
-  return from+(to-from)*section.blend;
+ const mapped=sectionLane(section,lane),current=midpoint(section.edges,mapped);
+ if(section.taper&&section.count!==section.base&&!(section.count===4&&section.base===3&&section.taperAnchor==='inner')){
+  const base=edgesFor(section.base,section.median),target=section.target,n=semanticLane(lane,section.base);
+  const from=midpoint(base,n),to=midpoint(target,mapped);
+  return interpolate(from,to,section.transition);
  }
  return current;
 }
@@ -110,10 +130,7 @@ export function remapRoadPoint(spec,id,point,axis=null){
    const routeOuter=outerLane+(parkingCenter-outerLane)*section.parkingBlend,values=[section.median,laneCenter(section,1),laneCenter(section,2),routeOuter,section.roadEdges.at(-1)],keys=[3,5,9,13,15.25];
    let i=1;while(i<4&&d>keys[i])i++;const t=(d-keys[i-1])/(keys[i]-keys[i-1]);return values[i-1]+(values[i]-values[i-1])*t;
   };
-  let value=center(along);
-  const crossing=spec.junctions.find(([x,z])=>Math.abs((vertical?x:z)-(vertical?r[0]:r[1]))<.01&&Math.abs(along-(vertical?z:x))<30);
-  if(crossing){const j=vertical?crossing[1]:crossing[0],t=(along-j+30)/60,smooth=t*t*t*(t*(t*6-15)+10);value=center(j-30)+(center(j+30)-center(j-30))*smooth;}
-  result[vertical?'x':'z']=(vertical?r[0]:r[1])+Math.sign(lateral)*value;
+  result[vertical?'x':'z']=(vertical?r[0]:r[1])+Math.sign(lateral)*center(along);
  }
  return result;
 }

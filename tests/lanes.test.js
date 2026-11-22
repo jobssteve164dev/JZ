@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {getRoute} from '../src/routes.js';import {Simulation} from '../src/simulation.js';
+import {getRoute,nearest} from '../src/routes.js';import {Simulation} from '../src/simulation.js';
 import {checkLane,medianAt} from '../src/lanes.js';
 // Hand-calculated lane centers from the source lane counts and the schematic road widths.
 // Section-count and arrow fixtures live in road-layout.test.js; old fixed-three-lane expectations are superseded.
@@ -14,6 +14,17 @@ for(const [id,kind,n,axis,value] of fixtures)test(`source image ${id} ${kind}/${
 function movingStart(z){const s=new Simulation(getRoute(9));s.belt=true;s.gear='D';s.handbrake=false;s.signal='left';s.signalAge=4;s.looks.left=0;s.position.z=z*s.route.scale;s.speed=2;return s;}
 test('a car in the adjacent lane fails even while close to the reference route',()=>{const s=movingStart(-9);s.step(.1);assert.ok(s.faults.some(f=>f.key.startsWith('lane-')),JSON.stringify(s.faults));});
 test('car body straddling a lane divider outside a change zone is detected',()=>{const s=movingStart(-11);s.step(.1);assert.ok(s.faults.some(f=>f.key.startsWith('lane-')),JSON.stringify(s.faults));});
+test('the three receiving lanes still enforce their dividers while settling after the junction',()=>{
+ const route=getRoute(9),k=route.scale;
+ const center={x:55*k,z:9*k},progress=nearest(route,center,route.events[11].endS).s;
+ for(const mode of ['practice','exam']){
+  const s=new Simulation(route,mode);
+  Object.assign(s,{progress,position:center,speed:8,heading:Math.PI/2});
+  assert.equal(checkLane(s),null);
+  s.position={x:center.x,z:7.4*k};
+  assert.ok(checkLane(s)?.key.startsWith('lane-'),`${mode} must still detect straddling a divider`);
+ }
+});
 test('driving through the physical median is detected independently of progress',()=>{const s=movingStart(0);s.step(.1);assert.ok(s.faults.some(f=>f.key==='median'),JSON.stringify(s.faults));});
 test('a car clipping the raised turn planter is detected before its centre reaches it',()=>{
  const route=getRoute(9),s=new Simulation(route,'exam'),k=route.scale;

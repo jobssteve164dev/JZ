@@ -31,5 +31,13 @@ async page=>{
  const before=await page.locator('#upcoming').textContent();if(!before.startsWith('会车 · 剩余'))throw new Error('meeting expired before five active seconds: '+before);
  await page.waitForTimeout(100);await page.screenshot({path:'output/meeting-v9/countdown.png'});await page.clock.fastForward(400);
  const notice=await page.locator('#notice').textContent();if(!notice.includes('操作超时'))throw new Error('meeting failed to expire after five seconds: '+notice);
+ await page.clock.fastForward(300);
+ await page.locator('[data-action="look"][data-value="left"]').click();
+ await page.clock.fastForward(300);
+ if(await page.locator('#notice').textContent()!=='已观察左后方')throw new Error('an old meeting fault replaced the new feedback');
+ await page.clock.fastForward(6200);
+ if(await page.locator('#notice').isVisible())throw new Error('the notice did not clear after the active feedback expired');
+ await page.locator('[data-action="gear"][data-value="D"]').click();
+ if(await page.locator('#notice').isVisible())throw new Error('choosing a gear replayed the meeting fault');
  if(errors.length)throw new Error(JSON.stringify(errors));await page.clock.resume();return {initial,before,notice,errors};
 }

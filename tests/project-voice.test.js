@@ -4,14 +4,16 @@ import {approachProject,approachSpeech} from '../src/project-voice.js';
 import {getRoute,at} from '../src/routes.js';
 import {Simulation} from '../src/simulation.js';
 
-test('autonomous lane changes on every route keep silent while ordinary projects retain approach speech',()=>{
- for(const id of [1,9,10]){
+for(const [id,announced,silent] of [[1,[11],[2]],[9,[5],[7]],[10,[1],[3,11,13]]]){
+ test(`route ${id}: only the lane changes marked self-directed in the reference skip voice`,()=>{
   const events=getRoute(id).events;
-  for(const event of events.filter(event=>event.kind==='change'))assert.equal(approachSpeech(event),null,`${event.id} must stay silent`);
+  assert.deepEqual(events.filter(event=>event.kind==='change').map(event=>+event.id.split('-')[1]),[...announced,...silent].sort((a,b)=>a-b));
+  for(const index of announced)assert.equal(approachSpeech(events[index]),'前方变更车道');
+  for(const index of silent)assert.equal(approachSpeech(events[index]),null);
   const turn=events.find(event=>['left','right'].includes(event.kind));
   assert.equal(approachSpeech(turn),`前方${turn.label}`);
- }
-});
+ });
+}
 
 test('projects with dedicated or intentionally silent prompts do not get a generic approach announcement',()=>{
  for(const kind of ['start','meet','overtake'])assert.equal(approachSpeech({kind,label:'不应播报',silent:false}),null);

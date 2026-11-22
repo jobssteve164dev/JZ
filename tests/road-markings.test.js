@@ -54,6 +54,25 @@ test('route 1 parking divider stays straight where three travel lanes begin spli
  const ray=new THREE.Raycaster(new THREE.Vector3((-380+12.5)*k,10,138*k),new THREE.Vector3(0,-1,0));
  assert.ok(ray.intersectObject(g,true).some(hit=>hit.object.name==='road-white'),'parking divider bends into the travel-lane split');
 });
+for(const [id,road,direction] of [[1,1,'S'],[9,0,'E'],[10,1,'S']])test(`route ${id}: the straight-through lane is painted on the same axis on both sides`,()=>{
+ const r=getRoute(id),g=m.buildRoadSurface(r),k=r.scale;
+ g.updateMatrixWorld(true);
+ const markings=g.getObjectByName('road-white');
+ for(const along of [-42,42])for(const divider of [7.8,10.2]){
+  const [x,z]=direction==='S'?[-divider,along]:[along,divider];
+  const ray=new THREE.Raycaster(new THREE.Vector3(x*k,10,z*k),new THREE.Vector3(0,-1,0));
+  assert.ok(ray.intersectObject(markings).length,`road ${road} has a missing divider at ${along}, ${divider}`);
+ }
+});
+test('route 9 eastbound through arrows keep all three approach axes after the junction',()=>{
+ const r=getRoute(9),g=m.buildRoadSurface(r),k=r.scale;
+ g.updateMatrixWorld(true);
+ const arrows=g.getObjectByName('direction-arrows');
+ for(const along of [-40,40])for(const center of [6.6,9,11.4]){
+  const ray=new THREE.Raycaster(new THREE.Vector3(along*k,10,center*k),new THREE.Vector3(0,-1,0));
+  assert.ok(ray.intersectObject(arrows).length,`through arrow is off axis at ${along}, ${center}`);
+ }
+});
 const renderedTransitions=[
  ['route 1 starting approach',1,0,'N',85,140],['route 1 southbound exit',1,1,'S',65,140],
  ['route 9 northbound approach',9,1,'N',80,140],['route 9 northbound exit',9,1,'N',-100,-40],['route 9 opposite U-turn side',9,1,'S',-1026,-1006],

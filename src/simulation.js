@@ -3,9 +3,22 @@ import {updateOvertake,updateMeeting,prompt} from './maneuvers.js';
 import {LightingControls,LightStalk} from './lights.js';
 import {checkLane,laneNumber,curbGap,checkDirection,laneStage,lateralPosition} from './lanes.js';
 import {trafficSignal} from './traffic-signals.js';
+import {roadCoordinates,roadSection} from './road-layout.js';
 export {lightPhase} from './traffic-signals.js';
 export const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 export const angle=n=>Math.atan2(Math.sin(n),Math.cos(n));
+const roadHeading={N:0,E:Math.PI/2,S:Math.PI,W:-Math.PI/2};
+function trafficPosition(route,event){
+  if(event.kind==='overtake'){
+    const {road,direction,from}=event.laneChange;
+    const point=at(route,event.returnS-6);
+    const along=(direction==='N'||direction==='S'?point.z:point.x)/route.scale;
+    const {edges}=roadSection(route.id,road,direction,along);
+    return {...roadCoordinates(route,road,direction,along,(edges[from-1]+edges[from])/2),heading:roadHeading[direction]};
+  }
+  const point=at(route,event.s+20*route.scale),offset=-18*route.scale;
+  return {x:point.x+Math.cos(point.heading)*offset,z:point.z+Math.sin(point.heading)*offset,heading:point.heading+Math.PI};
+}
 export class Simulation{
   constructor(route,mode='practice',{waitForSpeech=false}={}){
     this.waitForSpeech=waitForSpeech;
@@ -15,7 +28,7 @@ export class Simulation{
     this.lighting=new LightingControls();this.lightStalk=new LightStalk(this.lighting);this.brakePressed=false;
     this.paused=false;this.finished=false;this.score=100;this.faults=[];this.keys=new Set();
     this.events=route.events.map(e=>({...e,entered:false,status:'pending',peakSpeed:0,braked:false,lookLeft:false,lookRight:false}));
-    this.traffic=route.events.filter(e=>['meet','overtake'].includes(e.kind)).map(e=>{const p=at(route,e.s+(e.kind==='overtake'?50:20)*route.scale),offset=(e.kind==='meet'?-18:4)*route.scale;return {id:e.id,s:e.s,active:false,x:p.x+Math.cos(p.heading)*offset,z:p.z+Math.sin(p.heading)*offset,heading:p.heading+(e.kind==='meet'?Math.PI:0),kind:e.kind};});
+    this.traffic=route.events.filter(e=>['meet','overtake'].includes(e.kind)).map(e=>({id:e.id,s:e.s,active:false,kind:e.kind,...trafficPosition(route,e)}));
     this.prompts=[];this.offset=0;this.steer=0;this.message='准备起步';this.started=false;this.parkingReady=false;
   }
   action(name,value){
@@ -23,7 +36,7 @@ export class Simulation{
     if(name==='belt')this.belt=!this.belt;
     if(name==='handbrake')this.handbrake=!this.handbrake;
     if(name==='gear'&&['P','N','D'].includes(value)){
-      if(this.speed>.2&&value==='P'){this.message='请停稳后挂 P 挡';return;}
+      if(this.speed>.2&&value==='P')return this.message='请停稳后挂 P 挡';
       this.gear=value;
     }
     if(name==='signal'){
@@ -31,7 +44,7 @@ export class Simulation{
       this.signal=this.signal===value?'off':value;this.signalAge=0;this.signalHeading=this.heading;this.signalTurned=false;
     }
     if(name==='look'&&['left','right'].includes(value))this.looks[value]=this.time;
-    if(name==='finish')this.finishParking();
+    if(name==='finish'&&!this.finishParking())return this.message;
   }
   signalReady(direction){return this.signal===direction&&this.signalAge>=3-1e-8;}
   promptFinished(id,finishedAt=this.time){
@@ -107,8 +120,7 @@ export class Simulation{
           if(!checkDirection(this,e))this.fail(`${e.id}-arrow`,`${e.label}：当前车道导向不允许此方向`);
         }
         const direction=e.direction==='left'?-1:1;
-        const roadHeading=e.laneChange&&({N:0,E:Math.PI/2,S:Math.PI,W:-Math.PI/2}[e.laneChange.direction]);
-        const signalCheckpoint=e.laneChange?this.speed>.5&&(direction*this.steer>.08||direction*angle(this.heading-roadHeading)>.04):this.progress>=(e.assessmentStart??e.s);
+        const signalCheckpoint=e.laneChange?this.speed>.5&&(direction*this.steer>.08||direction*angle(this.heading-roadHeading[e.laneChange.direction])>.04):this.progress>=(e.assessmentStart??e.s);
         if(signalCheckpoint&&!e.checked){e.checked=true;
           if(e.direction&&e.kind!=='start')this.checkSignal(e,!['left','right'].includes(e.kind));
         }

@@ -15,7 +15,7 @@ import {bayWidth,roadBays} from './road-layout.js';
 const engineSound=new EngineSound();
 const images={1:new URL('../input/mmexport1790494901618.jpg',import.meta.url).href,9:new URL('../input/mmexport1790494903835.jpg',import.meta.url).href,10:new URL('../input/mmexport1790494905745.jpg',import.meta.url).href,lights:new URL('../input/mmexport1790495905014.jpg',import.meta.url).href};
 const $=s=>document.querySelector(s);
-let selected=1,mode='practice',sim=new Simulation(getRoute(1)),scene,screen='home',lightExam=null,lightOnly=false,lightFailures=[],voice=true,voiceBusy=false,lightAwait=false,lastAnnounced='',noticeUntil=0,noticeText='',lastTime=performance.now(),lastUI=0;
+let selected=1,mode='practice',sim=new Simulation(getRoute(1)),scene,screen='home',lightExam=null,lightOnly=false,lightFailures=[],voice=true,voiceBusy=false,lightAwait=false,lastAnnounced='',noticeUntil=0,shownFaults=0,lastTime=performance.now(),lastUI=0;
 const portraitTouch=matchMedia('(pointer: coarse) and (orientation: portrait)');
 const held=new Set();let touchSteer=0,keyboardSteer=0;
 let stalkUI=null,lightSettle=0,lightFeedbackTime=0,learner=null;
@@ -35,7 +35,7 @@ function speak(text,done,queue=false){
 }
 function stopVoice(){voiceEpoch++;if('speechSynthesis'in window)speechSynthesis.cancel();voiceBusy=false;}
 function spokenAt(session){return session.time+(session===sim&&screen==='drive'&&!session.paused?Math.max(0,(performance.now()-lastTime)/1000):0);}
-function showNotice(text){noticeText=text;noticeUntil=performance.now()+6000;$('#notice').textContent=text;$('#notice').classList.remove('hidden');}
+function showNotice(text){noticeUntil=performance.now()+6000;$('#notice').textContent=text;$('#notice').classList.remove('hidden');}
 function map(canvas,route,state){
  const c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;c.clearRect(0,0,w,h);
  const xs=route.path.map(p=>p.x),zs=route.path.map(p=>p.z);const minX=Math.min(...xs)-40,maxX=Math.max(...xs)+40,minZ=Math.min(...zs)-40,maxZ=Math.max(...zs)+40;
@@ -145,6 +145,7 @@ function completeLights(){
 }
 function startDriving(){
  engineSound.unlock();lightExam=null;sim=new Simulation(getRoute(selected),mode,{waitForSpeech:voice&&'speechSynthesis'in window});sim.belt=true;
+ shownFaults=0;$('#notice').classList.add('hidden');
  if(lightFailures.length&&mode!=='learn')sim.fail('lighting','模拟灯光有未通过项目');
  const session=sim;learner=mode==='learn'?new LearningDriver(sim,(text,done)=>speak(text,()=>done?.(spokenAt(session)),true)):null;
  $('#game').classList.toggle('learning',mode==='learn');
@@ -206,7 +207,6 @@ function renderUI(){
    lastAnnounced=nextVoice.id;const text=approachSpeech(nextVoice);if(text)speak(text,null,true);
   }
  }
- if(sim.message!==noticeText&&sim.faults.some(f=>f.text===sim.message))showNotice(sim.message);
  if(performance.now()>noticeUntil)$('#notice').classList.add('hidden');
  map($('#mini-map'),sim.route,sim);
 }
@@ -216,6 +216,7 @@ function animate(now){
   sim.waitForSpeech=voice&&'speechSynthesis'in window;
   const dir=(held.has('right')?1:0)-(held.has('left')?1:0);keyboardSteer+=(dir-keyboardSteer)*Math.min(1,dt*5);
   if(learner)learner.step(dt);else sim.step(dt,{throttle:held.has('throttle')?1:0,brake:held.has('brake')?1:0,steer:touchSteer||keyboardSteer});
+  if(sim.faults.length>shownFaults){shownFaults=sim.faults.length;showNotice(sim.faults.at(-1).text);}
   if(!touchSteer)$('#wheel').value=keyboardSteer;thumbWheel.render(sim.paused?0:sim.steer);
   scene.render(sim);if(now-lastUI>100){renderUI();lastUI=now;}
   for(const p of sim.prompts.splice(0)){const session=sim;showNotice(p.text);speak(p.text,()=>session.promptFinished(p.id,spokenAt(session)),true);}
@@ -234,7 +235,13 @@ $('#car-lights').onclick=vehicleLighting;
 $('#view').onclick=()=>{scene.view=scene.view==='chase'?'cockpit':'chase';$('#view').textContent=scene.view==='chase'?'驾驶位':'跟车视角';};
 for(const b of document.querySelectorAll('[data-route]'))b.onclick=()=>selectRoute(+b.dataset.route);
 for(const b of document.querySelectorAll('[data-mode]'))b.onclick=()=>{mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(x=>{const active=x===b;x.classList.toggle('active',active);x.setAttribute('aria-pressed',active);});$('#start span').textContent=mode==='practice'?'开始练习':mode==='learn'?'开始跟随学习':'开始模拟考试';};
-for(const b of document.querySelectorAll('[data-action]'))b.onclick=()=>{if(mode==='learn')return;sim.action(b.dataset.action,b.dataset.value);renderActionState();if(['look','gear','handbrake','finish'].includes(b.dataset.action))showNotice(b.dataset.action==='look'?`已观察${b.dataset.value==='left'?'左':'右'}后方`:sim.message);};
+for(const b of document.querySelectorAll('[data-action]'))b.onclick=()=>{
+ if(mode==='learn')return;
+ const {action,value}=b.dataset,message=sim.action(action,value);
+ renderActionState();
+ if(action==='look')showNotice(`已观察${value==='left'?'左':'右'}后方`);
+ else if(message)showNotice(message);
+};
 for(const b of document.querySelectorAll('[data-hold]')){
  const release=()=>{held.delete(b.dataset.hold);b.classList.remove('active');};
  b.onpointerdown=e=>{b.setPointerCapture(e.pointerId);held.add(b.dataset.hold);b.classList.add('active');};b.onpointerup=b.onpointercancel=b.onlostpointercapture=release;

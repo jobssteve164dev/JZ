@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {roadSection,roadArrows,junctionBounds} from './road-layout.js';
+import {roadSection,roadArrows,junctionBounds,taperStart} from './road-layout.js';
 import {inJunction} from './lanes.js';
 const heading={N:0,E:Math.PI/2,S:Math.PI,W:-Math.PI/2};
 export function buildRoadSurface(route){
@@ -33,9 +33,11 @@ export function buildRoadSurface(route){
    }
    if(inJunction(route,point(r,mid,0)))continue;
    for(const [d,s0,s1]of [[1,p0,p1],[-1,n0,n1]]){
-    const solid=roadArrows(route.id).some(row=>row.road===road&&row.direction===(d===1?pos:neg)&&Math.abs(row.along-mid)<24&&!s0.taper);
+    const solid=!s0.taper&&!s0.receivingTaper&&roadArrows(route.id).some(row=>row.road===road&&row.direction===(d===1?pos:neg)&&Math.abs(row.along-mid)<24);
     if(solid||Math.floor((a-from)/4)%3===0){
-     const count=Math.min(s0.edges.length,s1.edges.length);for(let i=1;i<count-1;i++)stripe('white',r,a,b,d*s0.edges[i],d*s1.edges[i],.12);
+     const start=s0.count===s1.base&&s1.taper&&s0.count<s1.count?taperStart(s0.edges,s1.count,s1.taperAnchor):s0.edges;
+     const end=s1.count===s0.base&&s0.taper&&s1.count<s0.count?taperStart(s1.edges,s0.count,s0.taperAnchor):s1.edges;
+     const count=Math.min(start.length,end.length);for(let i=1;i<count-1;i++)stripe('white',r,a,b,d*start[i],d*end[i],.12);
     }
     if(s0.parking&&s1.parking&&(route.id===1||s0.parkingBlend===1&&s1.parkingBlend===1||Math.floor((a-from)/4)%3===0)){
      stripe('white',r,a,b,d*s0.parking.inner,d*s1.parking.inner,.12);
@@ -106,7 +108,9 @@ export function buildRoadSurface(route){
  });
  for(const {road,direction,along,lane,turns}of rows){
   const r=route.roads[road],section=roadSection(route.id,road,direction,along);if(lane>section.count)continue;
-  const lateral=(section.edges[lane-1]+section.edges[lane])/2*(direction==='S'||direction==='W'?-1:1),p=point(r,along,lateral),a=heading[direction];
+  const middle=(section.edges[lane-1]+section.edges[lane])/2;
+  const center=turns.includes('straight')?section.straightCenters?.[lane-1]??middle:middle;
+  const lateral=center*(direction==='S'||direction==='W'?-1:1),p=point(r,along,lateral),a=heading[direction];
   polygon([[-.13,-2],[.13,-2],[.13,1],[-.13,1]],p.x,p.z,a);
   if(turns.includes('straight'))polygon([[-.55,1],[0,2],[.55,1],[.13,1],[.13,0],[-.13,0],[-.13,1]],p.x,p.z,a);
   for(const [turn,d]of [['left',-1],['right',1]])if(turns.includes(turn))polygon([[0,.25],[d*.72,.25],[d*.72,-.05],[d*1.2,.6],[d*.72,1.2],[d*.72,.85],[0,.85]],p.x,p.z,a);

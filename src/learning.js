@@ -16,7 +16,7 @@ export class LearningDriver{
   const s=this.sim,r=s.route;
   const maneuver=s.events.some(e=>e.status==='pending'&&(e.meetingEntered||e.overtakeEntered));
   for(const e of s.events)if(!maneuver&&!['meet','overtake'].includes(e.kind)&&!this.spoken.has(e.id)&&(e.announceS??e.s)-s.progress<90){
-   this.spoken.add(e.id);this.caption=`${e.label}。${e.hint}`;this.captionVoice=e.kind!=='change';if(this.captionVoice)this.announce(this.caption);
+   this.spoken.add(e.id);this.caption=`${e.label}。${e.hint}`;this.captionVoice=!e.selfDirected;if(this.captionVoice)this.announce(this.caption);
   }
   if(!s.started){
    if(s.signal!=='left')s.action('signal','left');s.action('look','left');

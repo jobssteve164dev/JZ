@@ -1,8 +1,8 @@
-const mutedApproachKinds=new Set(['start','meet','overtake','change']);
+const mutedApproachKinds=new Set(['start','meet','overtake']);
 export const APPROACH_DISTANCE=80;
 
 export function approachSpeech(event){
- return event.silent||mutedApproachKinds.has(event.kind)?null:`前方${event.label}`;
+ return event.silent||event.selfDirected||mutedApproachKinds.has(event.kind)?null:`前方${event.label}`;
 }
 
 export function approachProject(sim,current){

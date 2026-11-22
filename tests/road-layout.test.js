@@ -78,7 +78,7 @@ test('route 1 begins and finishes in the parking lane without numbering it as a 
 });
 const redistributedFourLaneSections=[
  ['route 1 starting approach',1,0,'N',35,180,[.25,3.25,6.25,9.25,12.5]],
- ['route 1 southbound exit',1,1,'S',40,180,[3,6,9,12,15.25]],
+ ['route 1 southbound exit',1,1,'S',40,180,[3,5.4,7.8,10.2,15.25]],
  ['route 9 northbound exit',9,1,'N',-35,-180,[3,6,9,12,15.25]],
  ['route 9 opposite U-turn side',9,1,'S',-1030,-940,[3,6,9,12,15.25]],
  ['route 10 northbound exit',10,1,'N',-35,-180,[3,6,9,12,15.25]],
@@ -95,6 +95,21 @@ const connectedJunctionSections=[
  ['route 10 eastbound side',10,0,'E',-40,40,15.25],
  ['route 10 southbound side',10,1,'S',-40,40,15.25]
 ];
+test('route 1 straight-through lane and both its dividers line up across the five-to-four junction',()=>{
+ const before=layout.roadSection(1,1,'S',-40),after=layout.roadSection(1,1,'S',40);
+ assert.deepEqual(after.edges.slice(2,4),before.edges.slice(2,4));
+ assert.equal(layout.laneCenter(before,2),layout.laneCenter(after,2));
+ const route=getRoute(1),points=route.path.filter(p=>Math.abs(p.z)<=40*route.scale&&p.s>route.keyPath[18].s);
+ assert.ok(points.length>8);
+ assert.ok(points.every(p=>Math.abs(p.x+9*route.scale)<1e-8),'the demonstration must also cross on a straight axis');
+});
+for(const [id,road,direction,before,after] of [
+ [1,1,'S',620,700],[9,0,'E',-40,40],[9,0,'W',40,-40],
+ [9,1,'S',-40,40],[10,0,'E',-40,40],[10,0,'W',40,-40],[10,1,'S',-40,40]
+])test(`route ${id} ${direction} ${before}: the through lane shares its dividers with the receiving lane`,()=>{
+ const first=layout.roadSection(id,road,direction,before),second=layout.roadSection(id,road,direction,after);
+ assert.deepEqual(second.edges.slice(1,3),first.edges.slice(2,4));
+});
 for(const [name,id,road,direction,before,after,outerEdge]of connectedJunctionSections)test(`${name} keeps its road edge connected through the junction`,()=>{
  const first=layout.roadSection(id,road,direction,before),second=layout.roadSection(id,road,direction,after);
  assert.notEqual(first.count,second.count);
@@ -138,9 +153,7 @@ for(const [name,id,road,direction,fourAt,midAt,threeAt,anchor]of threeFourTransi
   assert.notEqual(mid.edges[i],start[i]);
   assert.notEqual(mid.edges[i],four.edges[i]);
  }
- const fourWidths=four.edges.slice(1).map((edge,i)=>edge-four.edges[i]);
- const threeWidths=three.edges.slice(1).map((edge,i)=>edge-three.edges[i]);
- assert.ok(Math.max(...fourWidths)<Math.min(...threeWidths));
+ assert.ok(four.edges.every((edge,i)=>i===0||edge>four.edges[i-1]));
 });
 test('route 1 middle lane stays centred between moving dividers throughout its four-to-three exit',()=>{
  for(let blend=.05;blend<1;blend+=.05){
@@ -151,7 +164,10 @@ test('route 1 middle lane stays centred between moving dividers throughout its f
 test('route 10 adds short bays outside three continuous travel lanes',()=>{
  for(const [direction,along] of [['E',[-550,-473,-400]],['W',[-60,-155,-180]]]){
   const [bay,taper,main]=along.map(position=>layout.roadSection(10,0,direction,position));
-  for(const section of [bay,taper,main])assert.deepEqual(section.edges,[3,7,11,15.25]);
+  for(const section of [bay,taper,main]){
+   assert.equal(section.count,3);
+   assert.deepEqual([section.edges[0],section.edges.at(-1)],[3,15.25]);
+  }
   assert.deepEqual(bay.parking,{inner:15.25,outer:18.5});
   assert.ok(taper.parking?.outer>15.25&&taper.parking.outer<18.5);
   assert.equal(main.parking,null);
