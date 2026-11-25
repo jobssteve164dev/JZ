@@ -51,3 +51,21 @@ test('reject invalid inputs and unverified users without issuing a session', asy
   assert.equal(res.status,403);
   assert.equal(res.headers.get('Set-Cookie'),null);
 });
+
+test('practice material is issued only to a verified signed-in learner', async () => {
+  const start = cookie => new Request(origin+'/api/practice/start',{
+    method:'POST',headers:{Origin:origin,Cookie:cookie},
+  });
+  const provider = async url => Response.json({ok:true,data:url.endsWith('/link') ? {userId:user.id,productUid:user.id} : {user}});
+  const verified = await handle(post('verify-email',{token:'fixture'}),env,provider);
+  const cookie = verified.headers.get('Set-Cookie').split(';')[0];
+  for (const value of ['',cookie+'invalid']) {
+    const denied = await handle(start(value),env);
+    assert.equal(denied.status,401);
+    assert.equal((await denied.json()).questions,undefined);
+  }
+  const allowed = await handle(start(cookie),env);
+  assert.equal(allowed.status,200);
+  assert.equal(allowed.headers.get('Cache-Control'),'no-store');
+  assert.equal((await allowed.json()).questions.length,19);
+});

@@ -1,6 +1,6 @@
 import {at,nearest} from './routes.js';
 import {updateOvertake,updateMeeting,prompt} from './maneuvers.js';
-import {LightingControls,LightStalk} from './lights.js';
+import {LightingControls,LightStalk} from './practice-lights.js';
 import {checkLane,laneNumber,curbGap,checkDirection,laneStage,lateralPosition} from './lanes.js';
 import {trafficSignal} from './traffic-signals.js';
 import {roadCoordinates,roadSection} from './road-layout.js';

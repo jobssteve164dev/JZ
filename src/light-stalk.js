@@ -1,4 +1,4 @@
-import {LightStalk} from './lights.js';
+import {LightStalk} from './practice-lights.js';
 const leverDragThreshold=18,highBeamReturnThreshold=12;
 
 export function mountLightStalk(root,exam,enabled,onChange,stalk=new LightStalk(exam)){

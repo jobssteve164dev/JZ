@@ -13,6 +13,15 @@ const notices = {
   'forgot-password':'如果该邮箱已注册，你将收到重设密码的邮件。',
   'resend-verification':'请查看邮箱中的验证邮件。', 'reset-password':'密码已更新，可以登录了。',
 };
+let practiceQuery = location.search;
+if (location.pathname === '/verify-email') {
+  try { practiceQuery = localStorage.getItem('practiceAfterVerification') || ''; } catch { practiceQuery = ''; }
+}
+const params = new URLSearchParams(practiceQuery);
+const route = params.get('route');
+const practiceMode = params.get('mode');
+const resume = ['1','9','10'].includes(route) && ['practice','exam','learn','lights'].includes(practiceMode)
+  ? '/?' + new URLSearchParams({route,mode:practiceMode}) : null;
 let mode;
 let token = new URLSearchParams(location.search).get('token');
 if (token) history.replaceState(null, '', location.pathname);
@@ -65,8 +74,16 @@ form.addEventListener('submit', async event => {
     const result = await api(mode, data);
     if (result.user) {
       token = null;
+      try { localStorage.removeItem('practiceAfterVerification'); } catch {}
+      if (resume) return location.replace(resume);
       show('logout', '已登录 · ' + result.user.email);
     } else {
+      if (mode === 'register') {
+        try {
+          if (resume) localStorage.setItem('practiceAfterVerification', params.toString());
+          else localStorage.removeItem('practiceAfterVerification');
+        } catch {}
+      }
       const message = notices[mode] || '已退出登录。';
       if (mode === 'reset-password') token = null;
       show('login', message);
@@ -84,9 +101,10 @@ async function open() {
   if (action === 'verify-email' || action === 'reset-password') return show(action);
   try {
     const {user} = await api('session');
-    show(user ? 'logout' : 'login', user ? '已登录 · ' + user.email : '');
+    if (user && resume) return location.replace(resume);
+    show(user ? 'logout' : resume ? 'register' : 'login', user ? '已登录 · ' + user.email : resume ? '注册并验证邮箱后，即可开始练习。已有账号可直接登录。' : '');
   } catch {
-    show('login', '暂时无法连接账号服务，你仍可返回练习。');
+    show('login', '暂时无法连接账号服务，请检查网络后再试。');
   }
 }
 open();

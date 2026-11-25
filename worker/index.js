@@ -1,4 +1,5 @@
 import { createPassportClient } from '@szlk/passport-client';
+import { questions } from '../src/lights.js';
 import { cookie, current, issue } from './session.js';
 
 function json(data, status = 200, sessionCookie) {
@@ -24,6 +25,11 @@ export async function handle(request, env, fetchImpl = fetch) {
     result.headers.set('Referrer-Policy','no-referrer');
     result.headers.set('Cache-Control','no-store');
     return result;
+  }
+  if (pathname === '/api/practice/start') {
+    if (request.method !== 'POST' || request.headers.get('Origin') !== origin) return json({}, 403);
+    if (!await current(request, env.SESSION_SECRET)) return json({}, 401);
+    return json({questions});
   }
   if (!pathname.startsWith('/api/auth/')) return env.ASSETS.fetch(request);
   const action = pathname.slice('/api/auth/'.length);

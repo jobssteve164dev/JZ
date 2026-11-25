@@ -35,7 +35,7 @@ This file stores stable project facts future agents should reuse. Do not paste r
 
 ## Architecture Boundaries
 
-- Three.js + Vite，车辆物理与评分、路线、灯光、3D场景、界面分离；Cloudflare Workers Assets 提供练习页面。账号接口由同域 Worker 调用 SZLK Passport，邮箱验证或登录成功后签发产品会话；游客仍可离线练习，无需产品数据库。
+- Three.js + Vite，车辆物理与评分、路线、灯光、3D场景、界面分离；Cloudflare Workers Assets 提供练习页面。账号接口由同域 Worker 调用 SZLK Passport，邮箱验证或登录成功后签发产品会话；每轮路线及单练灯光开始前由服务端验证会话并提供灯光题目，无需产品数据库。
 - 只上传 dist；受控复用已授权 Cloudflare 部署凭据，不复制到公开仓库。
 
 ## Verification

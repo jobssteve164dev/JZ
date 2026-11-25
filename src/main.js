@@ -6,7 +6,7 @@ import {MEETING_SECONDS} from './maneuvers.js';
 import {Simulation} from './simulation.js';
 import {trafficSignal} from './traffic-signals.js';
 import {DrivingScene} from './scene.js';
-import {LightingExam,questions,lightNames} from './lights.js';
+import {PracticeLights,lightNames} from './practice-lights.js';
 import {mountLightStalk} from './light-stalk.js';
 import {LearningDriver} from './learning.js';
 import {EngineSound} from './engine-sound.js';
@@ -138,17 +138,44 @@ function help(){
 function rules(){dialog('资料与练习范围',`<p>路线以提供的一号、九号、十号线图片为准。灯光题目取自新增的“苏州观山科目三考场”图，不代表吴江官方题库。</p><p>模拟按 100 分计分，90 分合格；未打灯满 3 秒、闯红灯、未观察等记为不合格事项。道路尺寸、方向容差和感应范围为训练参数。</p><p><a href="https://btgaj.xjbt.gov.cn/c/2025-01-06/8378604.shtml" target="_blank" rel="noreferrer">公安部：机动车驾驶证申领和使用规定</a></p><p><a href="https://gaj.cq.gov.cn/zwgk/zcjd/201912/t20191227_3566720.html" target="_blank" rel="noreferrer">重庆公安：考试标准变化解读</a></p><p><a href="https://www.wuhan.gov.cn/zwgk/xxgk/zcjd/mtzj/202109/t20210923_1782799.shtml" target="_blank" rel="noreferrer">武汉政府：转向灯及停车要求</a></p><p><a href="https://ga.chengde.gov.cn/art/2024/4/12/art_3027_996587.html" target="_blank" rel="noreferrer">承德公安：学校等项目观察路牌</a></p><p><a href="https://www.wuxi.gov.cn/ztzl/jszbl/index.shtml" target="_blank" rel="noreferrer">无锡政府：学校、公交站减速要求</a></p>`);}
 function source(){const r=getRoute(selected);dialog(`${r.name} · 路线与考点`,`<div class="route-detail"><img src="${images[selected]}" alt="${r.name}考场路线参考图"><div><p>按行驶方向依次练习：</p><ol>${r.events.map(e=>`<li>${e.label}${e.kind==='change'?' · '+(e.direction==='left'?'向左':'向右'):''}</li>`).join('')}</ol></div></div><p>图中未标出的路段长度及信号配时为模拟设置。</p>`);}
 function selectRoute(id){selected=id;sim=new Simulation(getRoute(id),mode);scene.build(sim.route);map($('#preview-map'),sim.route);$('#preview-name').textContent=sim.route.name;document.querySelectorAll('[data-route]').forEach(b=>{const active=+b.dataset.route===id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',active);});}
-function prepare(){
+let requestingPractice=false;
+async function beginPractice(standalone=false){
+ if(requestingPractice)return;
+ requestingPractice=true;
+ const route=selected,practiceMode=mode;
+ try{
+  const response=await fetch('/api/practice/start',{method:'POST',cache:'no-store'});
+  if(response.status===401){
+   const params=new URLSearchParams({route:String(route),mode:standalone?'lights':practiceMode});
+   location.assign('/account/?'+params);
+   return;
+  }
+  if(!response.ok)throw new Error();
+  const {questions}=await response.json();
+  if(!Array.isArray(questions)||questions.length!==19)throw new Error();
+  lightOnly=standalone;
+  if(standalone)startLights(questions);
+  else {
+   if(selected!==route)selectRoute(route);
+   document.querySelector('[data-mode="'+practiceMode+'"]').click();
+   prepare(questions);
+  }
+ }catch{
+  dialog('暂时无法开始练习','<p>请检查网络连接后再试。</p><button id="retry-start" class="primary">重试</button>');
+  $('#retry-start').onclick=()=>beginPractice(standalone);
+ }finally{requestingPractice=false;}
+}
+function prepare(questions){
  dialog('上车准备',`<p>先完成检查，再开始模拟灯光考试。</p><div class="checklist"><button id="walk">绕车检查车辆与周围情况</button><button id="door">观察后方，关好车门</button><button id="seat">调整座椅、后视镜并系好安全带</button></div><button class="primary" id="begin-lights" disabled>开始模拟灯光</button>`);
  let ready=new Set();for(const id of ['walk','door','seat'])$('#'+id).onclick=()=>{ready.add(id);$('#'+id).classList.add('active');$('#begin-lights').disabled=ready.size<3;};
- $('#begin-lights').onclick=()=>{lightOnly=false;startLights();};
+ $('#begin-lights').onclick=()=>{lightOnly=false;enterDrivingDisplay();startLights(questions);};
 }
-function startLights(){
- screen='lights';lightExam=new LightingExam(lightOnly?'practice':mode,{standalone:lightOnly});lightFailures=[];lightAwait=false;
+function startLights(questions){
+ screen='lights';lightExam=new PracticeLights(questions,lightOnly?'practice':mode,{standalone:lightOnly});lightFailures=[];lightAwait=false;
  dialog(lightOnly?'灯光乱序练习':'起步前 · 随机五题',`<div class="progress-label"><span id="light-count"></span><span id="light-timer" class="timer"></span></div><div class="light-road" id="light-road" data-beam="off"></div><div class="light-question" id="light-question"></div><p id="light-guide"></p><div id="light-stalk"></div><div class="light-bottom"><p class="light-feedback" id="light-feedback" role="status"></p><button id="repeat-voice">重听口令</button><button class="primary hidden" id="light-continue">进入道路练习</button></div>`,'lighting');
  $('#close-modal').onclick=()=>{stopVoice();lightExam=null;screen='home';$('#modal').classList.add('hidden');};
  stalkUI=mountLightStalk($('#light-stalk'),lightExam,()=>(!lightAwait||lightExam.done)&&!voiceBusy,updateLights);
- $('#light-continue').onclick=completeLights;$('#repeat-voice').onclick=()=>{if(lightExam.mode!=='exam'&&!lightAwait)speak(questions[lightExam.current].text);};
+ $('#light-continue').onclick=completeLights;$('#repeat-voice').onclick=()=>{if(lightExam.mode!=='exam'&&!lightAwait)speak(lightExam.questions[lightExam.current].text);};
  showLightQuestion();
 }
 function updateLights(){
@@ -158,14 +185,14 @@ function updateLights(){
  if(lightExam.done)$('#light-continue').disabled=lightExam.beam!=='off'||lightExam.hazard;
 }
 function showLightQuestion(){
- lightAwait=false;lightSettle=0;const q=questions[lightExam.current];$('#light-question').textContent=q.text;$('#light-count').textContent=lightOnly?`${lightExam.index+1} / ${lightExam.order.length}`:lightExam.index===0?'准备 · 开启前照灯':lightExam.current===18?'收尾 · 关闭所有灯光':`${lightExam.index} / 5`;
+ lightAwait=false;lightSettle=0;const q=lightExam.questions[lightExam.current];$('#light-question').textContent=q.text;$('#light-count').textContent=lightOnly?`${lightExam.index+1} / ${lightExam.order.length}`:lightExam.index===0?'准备 · 开启前照灯':lightExam.current===18?'收尾 · 关闭所有灯光':`${lightExam.index} / 5`;
  $('#light-guide').textContent=lightExam.mode!=='exam'?(lightExam.current===18?'关闭全部灯光后继续。':`操作要点：${lightNames[q.answer]}。完成后自动进入下一题。`):'听完口令后，在 5 秒内完成操作。';
  $('#light-feedback').textContent='';$('#repeat-voice').disabled=lightExam.mode==='exam';updateLights();speak(q.text);
 }
 function submitLight(){
  if(voiceBusy)return;
  if(lightAwait)return;
- const q=questions[lightExam.current],passed=lightExam.submit();lightAwait=true;
+ const q=lightExam.questions[lightExam.current],passed=lightExam.submit();lightAwait=true;
  if(!passed)lightFailures.push(q.text);
  $('#light-feedback').textContent=passed?'操作正确':`本题未通过。正确操作：${lightNames[q.answer]}`;
  lightFeedbackTime=0;
@@ -173,7 +200,7 @@ function submitLight(){
 }
 function completeLights(){
  if(!lightExam?.done||lightExam.beam!=='off'||lightExam.hazard)return;
- stopVoice();if(lightOnly){const results=lightExam.results;screen='home';dialog('灯光练习结果',`<div class="result-score">${results.filter(r=>r.passed).length}<small> / ${results.length}</small></div><p>答错的口令值得再练一遍。</p><div class="results-list">${results.map(r=>`<div class="result-row ${r.passed?'':'bad'}"><span>${r.question.text}<br><small>${lightNames[r.question.answer]}</small></span><b>${r.passed?'正确':'待练'}</b></div>`).join('')}</div><button class="primary" id="retry-lights">再练一次</button>`);$('#retry-lights').onclick=startLights;lightExam=null;return;}
+ stopVoice();if(lightOnly){const results=lightExam.results;screen='home';dialog('灯光练习结果',`<div class="result-score">${results.filter(r=>r.passed).length}<small> / ${results.length}</small></div><p>答错的口令值得再练一遍。</p><div class="results-list">${results.map(r=>`<div class="result-row ${r.passed?'':'bad'}"><span>${r.question.text}<br><small>${lightNames[r.question.answer]}</small></span><b>${r.passed?'正确':'待练'}</b></div>`).join('')}</div><button class="primary" id="retry-lights">再练一次</button>`);$('#retry-lights').onclick=()=>beginPractice(true);lightExam=null;return;}
  startDriving();
 }
 function startDriving(){
@@ -188,7 +215,7 @@ function startDriving(){
 function pause(){
  if(screen!=='drive')return;engineSound.silence();sim.paused=true;resetControls();stopVoice();
  dialog('已暂停',`<p>计时与车辆均已暂停。</p><button class="primary" id="resume">继续驾驶</button> <button id="restart">重练这条路线</button> <button id="back-home">返回选路线</button>`);
- $('#resume').onclick=closeModal;$('#restart').onclick=()=>{screen='home';$('#game').classList.add('hidden');$('#home').classList.remove('hidden');prepare();};$('#back-home').onclick=home;
+ $('#resume').onclick=closeModal;$('#restart').onclick=()=>{screen='home';$('#game').classList.add('hidden');$('#home').classList.remove('hidden');beginPractice();};$('#back-home').onclick=home;
 }
 function vehicleLighting(){
  if(screen!=='drive')return;sim.paused=true;resetControls();stopVoice();
@@ -200,12 +227,12 @@ function results(){
  engineSound.silence();screen='result';stopVoice();resetControls();const failed=sim.faults;
  if(mode==='learn'){
   dialog('这条路线，学完了',`<p>${sim.route.name} · 3 公里 · ${formatTime(sim.time)}</p><p>现在自己开一遍，把路口方向和操作要点记牢。</p><button class="primary" id="try-driving">自己练一遍</button> <button id="return">换条路线</button>`);
-  $('#close-modal').onclick=home;$('#return').onclick=home;$('#try-driving').onclick=()=>{document.querySelector('[data-mode="practice"]').click();home();prepare();};return;
+  $('#close-modal').onclick=home;$('#return').onclick=home;$('#try-driving').onclick=()=>{document.querySelector('[data-mode="practice"]').click();home();beginPractice();};return;
  }
  const record={route:selected,score:sim.score,date:new Date().toISOString(),time:Math.round(sim.time)};
  try{const history=JSON.parse(localStorage.getItem('km3-history')||'[]');localStorage.setItem('km3-history',JSON.stringify([record,...(Array.isArray(history)?history:[])].slice(0,20)));}catch{}
  dialog(sim.score>=90?'本次模拟合格':'这些动作，再练一遍',`<div class="result-score">${sim.score}<small> 分</small></div><p>${sim.route.name} · ${formatTime(sim.time)} · 行驶 ${(sim.distance/1000).toFixed(2)} km</p><p>${failed.length?'下次优先练习以下项目。':'所有模拟项目完成，继续保持观察和减速的习惯。'}</p><div class="results-list">${failed.map(f=>`<div class="result-row bad"><span>${f.text}<br><small>${formatTime(f.time)} · ${Math.round(f.s)} m</small></span><b>−${f.points}</b></div>`).join('')}${sim.events.map(e=>`<div class="result-row ${e.status==='failed'?'bad':''}"><span>${e.label}</span><b>${e.status==='passed'?'已完成':'待加强'}</b></div>`).join('')}</div><button class="primary" id="retry">再练这条路线</button> <button id="return">换条路线</button><p><small>本结果仅为游戏内训练反馈，不是正式考试成绩。</small></p>`);
- $('#close-modal').onclick=home;$('#retry').onclick=()=>{home();prepare();};$('#return').onclick=home;
+ $('#close-modal').onclick=home;$('#retry').onclick=()=>{home();beginPractice();};$('#return').onclick=home;
 }
 function formatTime(seconds){return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;}
 function renderActionState(){
@@ -270,7 +297,7 @@ function animate(now){
  engineSound.update(sim,screen==='drive'&&!document.hidden,voiceBusy);
  requestAnimationFrame(animate);
 }
-$('#project-toggle').onclick=projectDetails;$('#help').onclick=$('#game-help').onclick=help;$('#source').onclick=source;$('#start').onclick=()=>{enterDrivingDisplay();prepare();};$('#install').onclick=()=>installApp(dialog);$('#only-lights').onclick=()=>{lightOnly=true;startLights();};$('#pause').onclick=pause;
+$('#project-toggle').onclick=projectDetails;$('#help').onclick=$('#game-help').onclick=help;$('#source').onclick=source;$('#start').onclick=()=>beginPractice();$('#install').onclick=()=>installApp(dialog);$('#only-lights').onclick=()=>beginPractice(true);$('#pause').onclick=pause;
 $('#engine-sound').onclick=()=>{engineSound.enabled=!engineSound.enabled;$('#engine-sound').setAttribute('aria-pressed',engineSound.enabled);$('#engine-sound').textContent=engineSound.enabled?'音效':'静音';if(engineSound.enabled)engineSound.unlock();else engineSound.silence();};
 $('#car-lights').onclick=vehicleLighting;
 $('#view').onclick=()=>{scene.view=scene.view==='chase'?'cockpit':'chase';$('#view').textContent=scene.view==='chase'?'驾驶位':'跟车视角';};
@@ -306,3 +333,12 @@ document.addEventListener('visibilitychange',()=>{lastTime=performance.now();if(
 addEventListener('blur',()=>{held.clear();touchSteer=0;if(screen==='drive'&&!sim.paused)pause();});
 registerOffline();
 try{scene=new DrivingScene($('#world'));selectRoute(1);requestAnimationFrame(animate);}catch(error){app.innerHTML='<div class="webgl-error"><h1>暂时无法开启 3D 画面</h1><p>请使用支持 WebGL 的新版 Chrome、Edge 或 Safari，并开启浏览器硬件加速后重试。</p><button onclick="location.reload()">重新加载</button></div>';console.error(error);}
+
+const pending=new URLSearchParams(location.search);
+const resumeMode=pending.get('mode'),resumeRoute=Number(pending.get('route'));
+if(scene && routes.some(route=>route.id===resumeRoute) && ['practice','exam','learn','lights'].includes(resumeMode)){
+ history.replaceState(null,'','/');
+ selectRoute(resumeRoute);
+ if(resumeMode!=='lights')document.querySelector('[data-mode="'+resumeMode+'"]').click();
+ beginPractice(resumeMode==='lights');
+}
